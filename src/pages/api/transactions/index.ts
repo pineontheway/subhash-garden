@@ -54,7 +54,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         totalDue,
         cashierId: currentUser.id,
         cashierName: currentUser.name,
-        status: 'active',
+        status: 'active' as const,
       };
 
       await db.insert(transactions).values(transaction);
@@ -165,7 +165,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           .orderBy(desc(transactions.createdAt));
       }
 
-      return res.status(200).json(result);
+      // Look up actual user names from users table
+      const userIds = new Set<string>();
+      result.forEach(t => {
+        if (t.cashierId) userIds.add(t.cashierId);
+        if (t.advanceReturnedBy) userIds.add(t.advanceReturnedBy);
+      });
+
+      const userList = await db.select().from(users);
+      const userMap = new Map(userList.map(u => [u.id, u.name]));
+
+      // Replace stored names with actual names from users table
+      const enrichedResult = result.map(t => ({
+        ...t,
+        cashierName: userMap.get(t.cashierId) || t.cashierName,
+        advanceReturnedByName: t.advanceReturnedBy
+          ? (userMap.get(t.advanceReturnedBy) || t.advanceReturnedByName)
+          : t.advanceReturnedByName,
+      }));
+
+      return res.status(200).json(enrichedResult);
     } catch (error) {
       console.error('Error fetching transactions:', error);
       return res.status(500).json({ error: 'Failed to fetch transactions' });

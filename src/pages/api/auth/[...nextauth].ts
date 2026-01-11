@@ -28,6 +28,15 @@ export const authOptions: NextAuthOptions = {
               image: user.image || null,
               role: null, // No role until admin assigns one
             });
+          } else {
+            // Update existing user's name and image from Google profile
+            await db.update(users)
+              .set({
+                name: user.name || existingUser.name,
+                image: user.image || existingUser.image,
+                updatedAt: new Date().toISOString(),
+              })
+              .where(eq(users.email, user.email));
           }
         } catch (error) {
           console.error('Error in signIn callback:', error);
