@@ -43,10 +43,11 @@ type Transaction = {
 export default function AdminDashboard() {
   const router = useRouter();
   const { data: session, status } = useSession();
-  const [activeTab, setActiveTab] = useState<'users' | 'prices' | 'reports'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'prices' | 'reports' | 'inventory'>('users');
   const [users, setUsers] = useState<User[]>([]);
   const [prices, setPrices] = useState<Price[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [inventoryTransactions, setInventoryTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingPrice, setEditingPrice] = useState<string | null>(null);
   const [newPrice, setNewPrice] = useState<number>(0);
@@ -66,6 +67,10 @@ export default function AdminDashboard() {
   const [fromDate, setFromDate] = useState(getTodayDate());
   const [toDate, setToDate] = useState(getTodayDate());
 
+  // Inventory date filter
+  const [invFromDate, setInvFromDate] = useState(getTodayDate());
+  const [invToDate, setInvToDate] = useState(getTodayDate());
+
   // Check admin access
   useEffect(() => {
     if (status === 'authenticated') {
@@ -82,7 +87,7 @@ export default function AdminDashboard() {
     if (session?.user?.role === 'admin') {
       fetchData();
     }
-  }, [activeTab, session, statusFilter, fromDate, toDate]);
+  }, [activeTab, session, statusFilter, fromDate, toDate, invFromDate, invToDate]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -119,6 +124,24 @@ export default function AdminDashboard() {
         if (res.ok) {
           const data = await res.json();
           setTransactions(data);
+        }
+      } else if (activeTab === 'inventory') {
+        const params = new URLSearchParams();
+        if (invFromDate) {
+          params.append('startDate', invFromDate);
+        }
+        if (invToDate) {
+          // Add one day to include the entire end date
+          const endDate = new Date(invToDate);
+          endDate.setDate(endDate.getDate() + 1);
+          params.append('endDate', endDate.toISOString().split('T')[0]);
+        }
+        const queryString = params.toString();
+        const url = queryString ? `/api/transactions?${queryString}` : '/api/transactions';
+        const res = await fetch(url);
+        if (res.ok) {
+          const data = await res.json();
+          setInventoryTransactions(data);
         }
       }
     } catch (error) {
@@ -184,6 +207,38 @@ export default function AdminDashboard() {
     .filter(t => t.status === 'active')
     .reduce((sum, t) => sum + t.advance, 0);
 
+  // Calculate inventory counts
+  const inventoryData = {
+    maleCostume: {
+      givenOut: inventoryTransactions.reduce((sum, t) => sum + t.maleCostume, 0),
+      returned: inventoryTransactions.filter(t => t.status === 'advance_returned').reduce((sum, t) => sum + t.maleCostume, 0),
+      stillOut: inventoryTransactions.filter(t => t.status === 'active').reduce((sum, t) => sum + t.maleCostume, 0),
+    },
+    femaleCostume: {
+      givenOut: inventoryTransactions.reduce((sum, t) => sum + t.femaleCostume, 0),
+      returned: inventoryTransactions.filter(t => t.status === 'advance_returned').reduce((sum, t) => sum + t.femaleCostume, 0),
+      stillOut: inventoryTransactions.filter(t => t.status === 'active').reduce((sum, t) => sum + t.femaleCostume, 0),
+    },
+    kidsCostume: {
+      givenOut: inventoryTransactions.reduce((sum, t) => sum + t.kidsCostume, 0),
+      returned: inventoryTransactions.filter(t => t.status === 'advance_returned').reduce((sum, t) => sum + t.kidsCostume, 0),
+      stillOut: inventoryTransactions.filter(t => t.status === 'active').reduce((sum, t) => sum + t.kidsCostume, 0),
+    },
+    tube: {
+      givenOut: inventoryTransactions.reduce((sum, t) => sum + t.tube, 0),
+      returned: inventoryTransactions.filter(t => t.status === 'advance_returned').reduce((sum, t) => sum + t.tube, 0),
+      stillOut: inventoryTransactions.filter(t => t.status === 'active').reduce((sum, t) => sum + t.tube, 0),
+    },
+    locker: {
+      givenOut: inventoryTransactions.reduce((sum, t) => sum + t.locker, 0),
+      returned: inventoryTransactions.filter(t => t.status === 'advance_returned').reduce((sum, t) => sum + t.locker, 0),
+      stillOut: inventoryTransactions.filter(t => t.status === 'active').reduce((sum, t) => sum + t.locker, 0),
+    },
+  };
+
+  const totalItemsOut = inventoryData.maleCostume.stillOut + inventoryData.femaleCostume.stillOut +
+    inventoryData.kidsCostume.stillOut + inventoryData.tube.stillOut + inventoryData.locker.stillOut;
+
   // Quick date filter helpers
   const setToday = () => {
     const today = getTodayDate();
@@ -213,6 +268,49 @@ export default function AdminDashboard() {
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     setFromDate(startOfMonth.toISOString().split('T')[0]);
     setToDate(getTodayDate());
+  };
+
+  // Inventory date filter helpers
+  const setInvToday = () => {
+    const today = getTodayDate();
+    setInvFromDate(today);
+    setInvToDate(today);
+  };
+
+  const setInvYesterday = () => {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const dateStr = yesterday.toISOString().split('T')[0];
+    setInvFromDate(dateStr);
+    setInvToDate(dateStr);
+  };
+
+  const setInvThisWeek = () => {
+    const today = new Date();
+    const dayOfWeek = today.getDay();
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - dayOfWeek);
+    setInvFromDate(startOfWeek.toISOString().split('T')[0]);
+    setInvToDate(getTodayDate());
+  };
+
+  const setInvThisMonth = () => {
+    const today = new Date();
+    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    setInvFromDate(startOfMonth.toISOString().split('T')[0]);
+    setInvToDate(getTodayDate());
+  };
+
+  // Get display label for inventory date range
+  const getInvDateLabel = () => {
+    const today = getTodayDate();
+    if (invFromDate === today && invToDate === today) return "Today's";
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+    if (invFromDate === yesterdayStr && invToDate === yesterdayStr) return "Yesterday's";
+    if (invFromDate === invToDate) return new Date(invFromDate).toLocaleDateString('en-IN', { dateStyle: 'medium' });
+    return `${new Date(invFromDate).toLocaleDateString('en-IN', { dateStyle: 'short' })} - ${new Date(invToDate).toLocaleDateString('en-IN', { dateStyle: 'short' })}`;
   };
 
   // Get display label for date range
@@ -298,6 +396,17 @@ export default function AdminDashboard() {
             }`}
           >
             Reports
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('inventory')}
+            className={`flex-1 py-3 text-center font-medium cursor-pointer ${
+              activeTab === 'inventory'
+                ? 'text-green-600 border-b-2 border-green-600'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Inventory
           </button>
         </div>
 
@@ -589,6 +698,184 @@ export default function AdminDashboard() {
                       ))}
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* Inventory Tab */}
+              {activeTab === 'inventory' && (
+                <div className="space-y-4">
+                  <h2 className="text-lg font-semibold text-gray-800">Inventory Tracking</h2>
+
+                  {/* Date Filter */}
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <h3 className="font-medium text-gray-700 mb-3 flex items-center gap-2">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      Filter by Date
+                    </h3>
+                    <div className="grid grid-cols-2 gap-3 mb-3">
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">From</label>
+                        <input
+                          type="date"
+                          value={invFromDate}
+                          onChange={(e) => setInvFromDate(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">To</label>
+                        <input
+                          type="date"
+                          value={invToDate}
+                          onChange={(e) => setInvToDate(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={setInvToday}
+                        className="px-3 py-1.5 bg-green-100 text-green-700 rounded-lg text-xs font-medium hover:bg-green-200 cursor-pointer"
+                      >
+                        Today
+                      </button>
+                      <button
+                        type="button"
+                        onClick={setInvYesterday}
+                        className="px-3 py-1.5 bg-green-100 text-green-700 rounded-lg text-xs font-medium hover:bg-green-200 cursor-pointer"
+                      >
+                        Yesterday
+                      </button>
+                      <button
+                        type="button"
+                        onClick={setInvThisWeek}
+                        className="px-3 py-1.5 bg-green-100 text-green-700 rounded-lg text-xs font-medium hover:bg-green-200 cursor-pointer"
+                      >
+                        This Week
+                      </button>
+                      <button
+                        type="button"
+                        onClick={setInvThisMonth}
+                        className="px-3 py-1.5 bg-green-100 text-green-700 rounded-lg text-xs font-medium hover:bg-green-200 cursor-pointer"
+                      >
+                        This Month
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Summary Card */}
+                  <div className="bg-orange-500 rounded-xl p-5 text-white text-center">
+                    <p className="text-sm opacity-90 mb-1">{getInvDateLabel()} Items Still Out</p>
+                    <p className="text-4xl font-bold">{totalItemsOut}</p>
+                    <p className="text-xs opacity-75 mt-2">Items yet to be returned by customers</p>
+                  </div>
+
+                  {/* Inventory Table */}
+                  <div className="bg-white rounded-xl shadow-[0_2px_10px_rgba(0,0,0,0.08)] overflow-hidden">
+                    <div className="p-4 border-b border-gray-100">
+                      <h3 className="font-semibold text-gray-800">{getInvDateLabel()} Item Breakdown</h3>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="text-left py-3 px-4 text-sm font-medium text-gray-600">Item</th>
+                            <th className="text-center py-3 px-4 text-sm font-medium text-blue-600">Given Out</th>
+                            <th className="text-center py-3 px-4 text-sm font-medium text-green-600">Returned</th>
+                            <th className="text-center py-3 px-4 text-sm font-medium text-orange-600">Still Out</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr className="border-t border-gray-100">
+                            <td className="py-3 px-4 text-gray-800">Male Costume</td>
+                            <td className="py-3 px-4 text-center text-blue-600 font-medium">{inventoryData.maleCostume.givenOut}</td>
+                            <td className="py-3 px-4 text-center text-green-600 font-medium">{inventoryData.maleCostume.returned}</td>
+                            <td className="py-3 px-4 text-center">
+                              <span className={`px-2 py-1 rounded-full text-sm font-medium ${inventoryData.maleCostume.stillOut > 0 ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600'}`}>
+                                {inventoryData.maleCostume.stillOut}
+                              </span>
+                            </td>
+                          </tr>
+                          <tr className="border-t border-gray-100">
+                            <td className="py-3 px-4 text-gray-800">Female Costume</td>
+                            <td className="py-3 px-4 text-center text-blue-600 font-medium">{inventoryData.femaleCostume.givenOut}</td>
+                            <td className="py-3 px-4 text-center text-green-600 font-medium">{inventoryData.femaleCostume.returned}</td>
+                            <td className="py-3 px-4 text-center">
+                              <span className={`px-2 py-1 rounded-full text-sm font-medium ${inventoryData.femaleCostume.stillOut > 0 ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600'}`}>
+                                {inventoryData.femaleCostume.stillOut}
+                              </span>
+                            </td>
+                          </tr>
+                          <tr className="border-t border-gray-100">
+                            <td className="py-3 px-4 text-gray-800">Kids Costume</td>
+                            <td className="py-3 px-4 text-center text-blue-600 font-medium">{inventoryData.kidsCostume.givenOut}</td>
+                            <td className="py-3 px-4 text-center text-green-600 font-medium">{inventoryData.kidsCostume.returned}</td>
+                            <td className="py-3 px-4 text-center">
+                              <span className={`px-2 py-1 rounded-full text-sm font-medium ${inventoryData.kidsCostume.stillOut > 0 ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600'}`}>
+                                {inventoryData.kidsCostume.stillOut}
+                              </span>
+                            </td>
+                          </tr>
+                          <tr className="border-t border-gray-100">
+                            <td className="py-3 px-4 text-gray-800">Tube</td>
+                            <td className="py-3 px-4 text-center text-blue-600 font-medium">{inventoryData.tube.givenOut}</td>
+                            <td className="py-3 px-4 text-center text-green-600 font-medium">{inventoryData.tube.returned}</td>
+                            <td className="py-3 px-4 text-center">
+                              <span className={`px-2 py-1 rounded-full text-sm font-medium ${inventoryData.tube.stillOut > 0 ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600'}`}>
+                                {inventoryData.tube.stillOut}
+                              </span>
+                            </td>
+                          </tr>
+                          <tr className="border-t border-gray-100">
+                            <td className="py-3 px-4 text-gray-800">Locker</td>
+                            <td className="py-3 px-4 text-center text-blue-600 font-medium">{inventoryData.locker.givenOut}</td>
+                            <td className="py-3 px-4 text-center text-green-600 font-medium">{inventoryData.locker.returned}</td>
+                            <td className="py-3 px-4 text-center">
+                              <span className={`px-2 py-1 rounded-full text-sm font-medium ${inventoryData.locker.stillOut > 0 ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600'}`}>
+                                {inventoryData.locker.stillOut}
+                              </span>
+                            </td>
+                          </tr>
+                        </tbody>
+                        <tfoot className="bg-gray-50 border-t-2 border-gray-200">
+                          <tr>
+                            <td className="py-3 px-4 font-semibold text-gray-800">Total</td>
+                            <td className="py-3 px-4 text-center font-bold text-blue-600">
+                              {inventoryData.maleCostume.givenOut + inventoryData.femaleCostume.givenOut + inventoryData.kidsCostume.givenOut + inventoryData.tube.givenOut + inventoryData.locker.givenOut}
+                            </td>
+                            <td className="py-3 px-4 text-center font-bold text-green-600">
+                              {inventoryData.maleCostume.returned + inventoryData.femaleCostume.returned + inventoryData.kidsCostume.returned + inventoryData.tube.returned + inventoryData.locker.returned}
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <span className="px-3 py-1 rounded-full text-sm font-bold bg-orange-500 text-white">
+                                {totalItemsOut}
+                              </span>
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Info Note */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                    <div className="flex items-start gap-3">
+                      <svg className="w-5 h-5 text-blue-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <div>
+                        <p className="font-medium text-blue-800">How to read this data</p>
+                        <p className="text-sm text-blue-700 mt-1">
+                          <strong>Given Out:</strong> Total items rented in this period<br />
+                          <strong>Returned:</strong> Items that have been returned<br />
+                          <strong>Still Out:</strong> Items currently with customers (not yet returned)
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
             </>
