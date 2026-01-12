@@ -95,8 +95,8 @@ export default function MySummary() {
     .filter(t => t.status === 'active')
     .reduce((sum, t) => sum + t.advance, 0);
 
-  // Cash to hand over = Revenue + Advances collected - Pending advances (to be returned later)
-  const cashToHandOver = totalSales + totalAdvanceCollected - activeAdvance;
+  // Cash to hand over = Revenue + Pending advances (still held, not yet returned)
+  const cashToHandOver = totalSales + activeAdvance;
 
   // Filter transactions based on status
   const filteredTransactions = statusFilter === 'all'
@@ -167,7 +167,7 @@ export default function MySummary() {
           <div className="bg-green-600 rounded-xl p-5 mb-6 text-white text-center">
             <p className="text-sm opacity-90 mb-1">Cash to Hand Over</p>
             <p className="text-4xl font-bold">₹{cashToHandOver.toFixed(2)}</p>
-            <p className="text-xs opacity-75 mt-2">(Revenue + Advances - Pending Returns)</p>
+            <p className="text-xs opacity-75 mt-2">(Revenue + Pending Advances)</p>
           </div>
 
           {/* Pending Advances Info */}
