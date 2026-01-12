@@ -140,17 +140,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         );
       }
 
-      // Admin filters
-      if (currentUser.role === 'admin') {
-        if (startDate) {
-          conditions.push(gte(transactions.createdAt, startDate as string));
-        }
-        if (endDate) {
-          conditions.push(lte(transactions.createdAt, endDate as string));
-        }
-        if (cashierId) {
-          conditions.push(eq(transactions.cashierId, cashierId as string));
-        }
+      // Date filters (for both admin and cashier)
+      if (startDate) {
+        conditions.push(gte(transactions.createdAt, startDate as string));
+      }
+      if (endDate) {
+        conditions.push(lte(transactions.createdAt, endDate as string));
+      }
+
+      // Admin-only filter: filter by specific cashier
+      if (currentUser.role === 'admin' && cashierId) {
+        conditions.push(eq(transactions.cashierId, cashierId as string));
       }
 
       let result;

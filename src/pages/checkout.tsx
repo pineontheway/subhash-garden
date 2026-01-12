@@ -222,9 +222,7 @@ export default function Checkout() {
             </svg>
             <span className="text-sm font-medium">Back</span>
           </button>
-          <svg className="w-8 h-8 text-green-600" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M20.57 14.86L22 13.43 20.57 12 17 15.57 8.43 7 12 3.43 10.57 2 9.14 3.43 7.71 2 5.57 4.14 4.14 2.71 2.71 4.14l1.43 1.43L2 7.71l1.43 1.43L2 10.57 3.43 12 7 8.43 15.57 17 12 20.57 13.43 22l1.43-1.43L16.29 22l2.14-2.14 1.43 1.43 1.43-1.43-1.43-1.43L22 16.29z"/>
-          </svg>
+          <img src="/logo.png" alt="Subhash Garden" className="w-8 h-8 rounded-full object-cover" />
           <span className="text-xl font-bold text-gray-800">Subhash Garden</span>
         </header>
 
@@ -303,7 +301,7 @@ export default function Checkout() {
               </div>
             </div>
             <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-              <span className="text-gray-500">Total Due</span>
+              <span className="text-gray-500">Total Amount</span>
               <span className="text-green-600 font-semibold text-lg">₹{totalDue.toFixed(2)}</span>
             </div>
           </div>
@@ -394,7 +392,7 @@ export default function Checkout() {
                 </div>
                 <div className="w-full border-b border-gray-300 my-2"></div>
                 <div className="flex justify-between text-lg font-bold text-gray-800">
-                  <span>TOTAL DUE</span>
+                  <span>TOTAL AMOUNT</span>
                   <span>₹{receiptData.totalDue.toFixed(2)}</span>
                 </div>
               </div>

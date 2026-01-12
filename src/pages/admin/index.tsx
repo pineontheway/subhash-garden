@@ -52,8 +52,17 @@ export default function AdminDashboard() {
   const [newPrice, setNewPrice] = useState<number>(0);
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'advance_returned'>('all');
 
-  // Date filter - default to today
-  const getTodayDate = () => new Date().toISOString().split('T')[0];
+  // Date filter - default to today (using Indian timezone)
+  const getTodayDate = () => {
+    const options: Intl.DateTimeFormatOptions = {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    };
+    const formatter = new Intl.DateTimeFormat('en-CA', options); // en-CA gives YYYY-MM-DD format
+    return formatter.format(new Date());
+  };
   const [fromDate, setFromDate] = useState(getTodayDate());
   const [toDate, setToDate] = useState(getTodayDate());
 
@@ -166,7 +175,7 @@ export default function AdminDashboard() {
   };
 
   // Calculate summary for filtered transactions
-  const filteredTotal = transactions.reduce((sum, t) => sum + t.totalDue, 0);
+  const filteredTotal = transactions.reduce((sum, t) => sum + t.subtotal, 0);
   const filteredAdvanceCollected = transactions.reduce((sum, t) => sum + t.advance, 0);
   const filteredAdvanceReturned = transactions
     .filter(t => t.status === 'advance_returned')
@@ -242,9 +251,7 @@ export default function AdminDashboard() {
               </svg>
             </button>
             <div className="flex items-center gap-2">
-              <svg className="w-8 h-8 text-green-600" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M20.57 14.86L22 13.43 20.57 12 17 15.57 8.43 7 12 3.43 10.57 2 9.14 3.43 7.71 2 5.57 4.14 4.14 2.71 2.71 4.14l1.43 1.43L2 7.71l1.43 1.43L2 10.57 3.43 12 7 8.43 15.57 17 12 20.57 13.43 22l1.43-1.43L16.29 22l2.14-2.14 1.43 1.43 1.43-1.43-1.43-1.43L22 16.29z"/>
-              </svg>
+              <img src="/logo.png" alt="Subhash Garden" className="w-8 h-8 rounded-full object-cover" />
               <span className="text-xl font-bold text-gray-800">Admin Panel</span>
             </div>
           </div>
@@ -481,7 +488,7 @@ export default function AdminDashboard() {
                       </div>
                       <div className="text-center">
                         <p className="text-2xl font-bold text-green-600">₹{filteredTotal.toFixed(2)}</p>
-                        <p className="text-sm text-green-700">Total Sales</p>
+                        <p className="text-sm text-green-700">Revenue</p>
                       </div>
                     </div>
                     <div className="border-t border-green-200 pt-3">

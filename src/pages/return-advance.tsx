@@ -128,9 +128,7 @@ export default function ReturnAdvance() {
             </svg>
           </button>
           <div className="flex items-center gap-2">
-            <svg className="w-8 h-8 text-green-600" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M20.57 14.86L22 13.43 20.57 12 17 15.57 8.43 7 12 3.43 10.57 2 9.14 3.43 7.71 2 5.57 4.14 4.14 2.71 2.71 4.14l1.43 1.43L2 7.71l1.43 1.43L2 10.57 3.43 12 7 8.43 15.57 17 12 20.57 13.43 22l1.43-1.43L16.29 22l2.14-2.14 1.43 1.43 1.43-1.43-1.43-1.43L22 16.29z"/>
-            </svg>
+            <img src="/logo.png" alt="Subhash Garden" className="w-8 h-8 rounded-full object-cover" />
             <span className="text-xl font-bold text-gray-800">Return Advance</span>
           </div>
         </header>
@@ -225,6 +223,43 @@ export default function ReturnAdvance() {
                   <span className="text-gray-600">Receipt</span>
                   <span className="font-medium text-gray-800">HC-{selectedTransaction.id.slice(-8).toUpperCase()}</span>
                 </div>
+
+                {/* Items to collect */}
+                <div className="border-t border-gray-200 my-3"></div>
+                <p className="text-sm font-medium text-gray-700 mb-2">Items to Collect:</p>
+                <div className="space-y-1 text-sm">
+                  {selectedTransaction.maleCostume > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Male Costume</span>
+                      <span className="font-medium text-gray-800">{selectedTransaction.maleCostume}</span>
+                    </div>
+                  )}
+                  {selectedTransaction.femaleCostume > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Female Costume</span>
+                      <span className="font-medium text-gray-800">{selectedTransaction.femaleCostume}</span>
+                    </div>
+                  )}
+                  {selectedTransaction.kidsCostume > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Kids Costume</span>
+                      <span className="font-medium text-gray-800">{selectedTransaction.kidsCostume}</span>
+                    </div>
+                  )}
+                  {selectedTransaction.tube > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Tube</span>
+                      <span className="font-medium text-gray-800">{selectedTransaction.tube}</span>
+                    </div>
+                  )}
+                  {selectedTransaction.locker > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Locker</span>
+                      <span className="font-medium text-gray-800">{selectedTransaction.locker}</span>
+                    </div>
+                  )}
+                </div>
+
                 <div className="border-t border-gray-200 my-3"></div>
                 <div className="flex justify-between items-center">
                   <span className="text-gray-800 font-medium">Advance to Return</span>
