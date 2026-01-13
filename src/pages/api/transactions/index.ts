@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '../auth/[...nextauth]';
 import { db } from '@/lib/db';
-import { transactions, users } from '@/lib/schema';
+import { transactions, users, type ReturnDetails } from '@/lib/schema';
 import { eq, desc, and, gte, lte, like, or } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 
@@ -33,7 +33,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         locker,
         subtotal,
         advance,
-        totalDue
+        totalDue,
+        isComplimentary
       } = req.body;
 
       if (!customerName || !customerPhone) {
@@ -55,6 +56,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         cashierId: currentUser.id,
         cashierName: currentUser.name,
         status: 'active' as const,
+        isComplimentary: isComplimentary || false,
       };
 
       await db.insert(transactions).values(transaction);
@@ -66,13 +68,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   }
 
-  // PATCH - Mark advance as returned
+  // PATCH - Mark advance as returned with item-level details
   if (req.method === 'PATCH') {
     try {
-      const { transactionId } = req.body;
+      const { transactionId, returnDetails } = req.body as {
+        transactionId: string;
+        returnDetails: ReturnDetails;
+      };
 
       if (!transactionId) {
         return res.status(400).json({ error: 'Transaction ID required' });
+      }
+
+      if (!returnDetails || !returnDetails.items) {
+        return res.status(400).json({ error: 'Return details required' });
       }
 
       // Get the transaction
@@ -89,6 +98,43 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(400).json({ error: 'Advance already returned for this transaction' });
       }
 
+      // Validate that quantities match the original transaction
+      const itemTypeToField: Record<string, keyof typeof transaction> = {
+        maleCostume: 'maleCostume',
+        femaleCostume: 'femaleCostume',
+        kidsCostume: 'kidsCostume',
+        tube: 'tube',
+        locker: 'locker',
+      };
+
+      for (const item of returnDetails.items) {
+        const originalQty = transaction[itemTypeToField[item.type]] as number;
+        const totalReturned = item.returnedGood + item.returnedDamaged + item.lost;
+
+        if (totalReturned !== originalQty) {
+          return res.status(400).json({
+            error: `Invalid quantities for ${item.type}: expected ${originalQty}, got ${totalReturned}`
+          });
+        }
+
+        // Validate deduction is provided when there are damaged or lost items
+        if ((item.returnedDamaged > 0 || item.lost > 0) && item.deduction <= 0) {
+          return res.status(400).json({
+            error: `Deduction required for damaged/lost ${item.type}`
+          });
+        }
+      }
+
+      // Calculate totals
+      const totalDeduction = returnDetails.totalDeduction;
+      const actualAmountReturned = transaction.advance - totalDeduction;
+
+      if (actualAmountReturned < 0) {
+        return res.status(400).json({
+          error: 'Total deduction cannot exceed advance amount'
+        });
+      }
+
       // Update the transaction
       await db.update(transactions)
         .set({
@@ -96,13 +142,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           advanceReturnedAt: new Date().toISOString(),
           advanceReturnedBy: currentUser.id,
           advanceReturnedByName: currentUser.name,
+          returnDetails: JSON.stringify(returnDetails),
+          totalDeduction,
+          actualAmountReturned,
         })
         .where(eq(transactions.id, transactionId));
 
       return res.status(200).json({
         success: true,
         message: 'Advance returned successfully',
-        advanceAmount: transaction.advance
+        advanceAmount: transaction.advance,
+        totalDeduction,
+        actualAmountReturned,
+        returnDetails,
       });
     } catch (error) {
       console.error('Error returning advance:', error);

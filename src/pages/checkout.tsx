@@ -20,6 +20,7 @@ type ReceiptData = {
   subtotal: number;
   advance: number;
   totalDue: number;
+  isVIP?: boolean;
 };
 
 export default function Checkout() {
@@ -41,6 +42,7 @@ export default function Checkout() {
     tube: 0,
     locker: 0,
   });
+  const [isVIP, setIsVIP] = useState(false);
 
   // Fetch prices from API
   useEffect(() => {
@@ -144,6 +146,11 @@ export default function Checkout() {
 
     setSaving(true);
     try {
+      // For VIP, all amounts are 0
+      const finalSubtotal = isVIP ? 0 : subtotal;
+      const finalAdvance = isVIP ? 0 : advance;
+      const finalTotalDue = isVIP ? 0 : totalDue;
+
       const res = await fetch('/api/transactions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -155,9 +162,10 @@ export default function Checkout() {
           kidsCostume: items.kidsCostume,
           tube: items.tube,
           locker: items.locker,
-          subtotal,
-          advance,
-          totalDue,
+          subtotal: finalSubtotal,
+          advance: finalAdvance,
+          totalDue: finalTotalDue,
+          isComplimentary: isVIP,
         }),
       });
 
@@ -173,10 +181,11 @@ export default function Checkout() {
           customerName: items.name,
           customerPhone: items.phone,
           cashierName: session.user.name || 'Unknown',
-          lineItems,
-          subtotal,
-          advance,
-          totalDue,
+          lineItems: isVIP ? lineItems.map(item => ({ ...item, price: 0 })) : lineItems,
+          subtotal: finalSubtotal,
+          advance: finalAdvance,
+          totalDue: finalTotalDue,
+          isVIP,
         });
         setShowReceipt(true);
       } else {
@@ -258,6 +267,29 @@ export default function Checkout() {
             </div>
           </div>
 
+          {/* VIP Toggle */}
+          <div className="bg-purple-50 rounded-2xl p-4 shadow-[0_4px_20px_rgba(0,0,0,0.08)] mb-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-purple-800 font-medium">VIP / Complimentary</span>
+                <p className="text-purple-600 text-xs mt-0.5">No payment required</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsVIP(!isVIP)}
+                className={`relative w-14 h-8 rounded-full transition-colors cursor-pointer ${
+                  isVIP ? 'bg-purple-600' : 'bg-gray-300'
+                }`}
+              >
+                <span
+                  className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow transition-transform ${
+                    isVIP ? 'translate-x-6' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+
           {/* Line Items Card */}
           <div className="bg-white rounded-2xl p-4 shadow-[0_4px_20px_rgba(0,0,0,0.08)] mb-4">
             {lineItems.map((item, index) => (
@@ -276,35 +308,47 @@ export default function Checkout() {
             </div>
           </div>
 
-          {/* Advance Card */}
-          <div className="bg-white rounded-2xl p-4 shadow-[0_4px_20px_rgba(0,0,0,0.08)]">
-            <div className="flex items-center justify-between mb-4">
-              <span className="text-gray-800 font-medium">Advance</span>
-              <div className="flex items-center">
-                <button
-                  type="button"
-                  onClick={() => setAdvance(Math.max(0, advance - 50))}
-                  className="w-10 h-8 bg-gray-200 text-gray-600 rounded-l flex items-center justify-center cursor-pointer hover:bg-gray-300"
-                >
-                  −
-                </button>
-                <div className="h-8 px-3 bg-gray-100 flex items-center justify-center text-gray-800 font-medium min-w-[80px]">
-                  {advance.toFixed(2)}
+          {/* Advance Card - Hidden for VIP */}
+          {!isVIP && (
+            <div className="bg-white rounded-2xl p-4 shadow-[0_4px_20px_rgba(0,0,0,0.08)]">
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-gray-800 font-medium">Advance</span>
+                <div className="flex items-center">
+                  <button
+                    type="button"
+                    onClick={() => setAdvance(Math.max(0, advance - 50))}
+                    className="w-10 h-8 bg-gray-200 text-gray-600 rounded-l flex items-center justify-center cursor-pointer hover:bg-gray-300"
+                  >
+                    −
+                  </button>
+                  <div className="h-8 px-3 bg-gray-100 flex items-center justify-center text-gray-800 font-medium min-w-[80px]">
+                    {advance.toFixed(2)}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAdvance(advance + 50)}
+                    className="w-10 h-8 bg-green-600 text-white rounded-r flex items-center justify-center cursor-pointer hover:bg-green-700"
+                  >
+                    +
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setAdvance(advance + 50)}
-                  className="w-10 h-8 bg-green-600 text-white rounded-r flex items-center justify-center cursor-pointer hover:bg-green-700"
-                >
-                  +
-                </button>
+              </div>
+              <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                <span className="text-gray-500">Total Amount</span>
+                <span className="text-green-600 font-semibold text-lg">₹{totalDue.toFixed(2)}</span>
               </div>
             </div>
-            <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-              <span className="text-gray-500">Total Amount</span>
-              <span className="text-green-600 font-semibold text-lg">₹{totalDue.toFixed(2)}</span>
+          )}
+
+          {/* VIP Summary */}
+          {isVIP && (
+            <div className="bg-purple-100 rounded-2xl p-4 shadow-[0_4px_20px_rgba(0,0,0,0.08)]">
+              <div className="flex items-center justify-between">
+                <span className="text-purple-800 font-medium">Total Amount</span>
+                <span className="text-purple-600 font-semibold text-lg">₹0.00 (VIP)</span>
+              </div>
             </div>
-          </div>
+          )}
         </main>
 
         {/* Pay Button */}
@@ -313,9 +357,13 @@ export default function Checkout() {
             type="button"
             onClick={handlePay}
             disabled={saving}
-            className="w-full py-4 bg-green-700 text-white text-lg font-semibold rounded-xl hover:bg-green-800 active:bg-green-900 cursor-pointer disabled:bg-gray-400 disabled:cursor-not-allowed"
+            className={`w-full py-4 text-white text-lg font-semibold rounded-xl cursor-pointer disabled:bg-gray-400 disabled:cursor-not-allowed ${
+              isVIP
+                ? 'bg-purple-600 hover:bg-purple-700 active:bg-purple-800'
+                : 'bg-green-700 hover:bg-green-800 active:bg-green-900'
+            }`}
           >
-            {saving ? 'Processing...' : `Pay ₹${totalDue.toFixed(2)}`}
+            {saving ? 'Processing...' : isVIP ? 'Complete (VIP)' : `Pay ₹${totalDue.toFixed(2)}`}
           </button>
         </div>
       </div>
@@ -400,12 +448,12 @@ export default function Checkout() {
               <div className="w-full border-b-2 border-dashed border-gray-300 my-4"></div>
 
               {/* Payment Status */}
-              <div className="text-center py-3 bg-green-50 rounded-lg mb-4">
-                <div className="flex items-center justify-center gap-2 text-green-700 font-semibold">
+              <div className={`text-center py-3 rounded-lg mb-4 ${receiptData.isVIP ? 'bg-purple-50' : 'bg-green-50'}`}>
+                <div className={`flex items-center justify-center gap-2 font-semibold ${receiptData.isVIP ? 'text-purple-700' : 'text-green-700'}`}>
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  PAYMENT RECEIVED
+                  {receiptData.isVIP ? 'VIP - COMPLIMENTARY' : 'PAYMENT RECEIVED'}
                 </div>
               </div>
 

@@ -39,11 +39,17 @@ export const transactions = sqliteTable('transactions', {
   cashierId: text('cashier_id').references(() => users.id).notNull(),
   cashierName: text('cashier_name').notNull(), // Denormalized for quick access
   createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
+  // VIP/Complimentary transaction (no payment)
+  isComplimentary: integer('is_complimentary', { mode: 'boolean' }).default(false).notNull(),
   // Advance return tracking
   status: text('status', { enum: ['active', 'advance_returned'] }).default('active').notNull(),
   advanceReturnedAt: text('advance_returned_at'),
   advanceReturnedBy: text('advance_returned_by').references(() => users.id),
   advanceReturnedByName: text('advance_returned_by_name'), // Denormalized for quick access
+  // Item return details (for tracking condition of returned items)
+  returnDetails: text('return_details'), // JSON string storing item-level return data
+  totalDeduction: real('total_deduction').default(0),
+  actualAmountReturned: real('actual_amount_returned'),
 });
 
 // Type exports for use in the app
@@ -53,3 +59,21 @@ export type Price = typeof prices.$inferSelect;
 export type NewPrice = typeof prices.$inferInsert;
 export type Transaction = typeof transactions.$inferSelect;
 export type NewTransaction = typeof transactions.$inferInsert;
+
+// Item return tracking types
+export type ItemType = 'maleCostume' | 'femaleCostume' | 'kidsCostume' | 'tube' | 'locker';
+
+export type ItemReturnEntry = {
+  type: ItemType;
+  rented: number;
+  returnedGood: number;
+  returnedDamaged: number;
+  lost: number;
+  deduction: number;
+};
+
+export type ReturnDetails = {
+  items: ItemReturnEntry[];
+  totalDeduction: number;
+  notes?: string;
+};

@@ -19,6 +19,9 @@ type Transaction = {
   createdAt: string;
   status: 'active' | 'advance_returned';
   advanceReturnedAt: string | null;
+  totalDeduction: number | null;
+  actualAmountReturned: number | null;
+  isComplimentary: boolean;
 };
 
 export default function MySummary() {
@@ -88,15 +91,20 @@ export default function MySummary() {
   const totalTransactions = transactions.length;
   const totalSales = transactions.reduce((sum, t) => sum + t.subtotal, 0);
   const totalAdvanceCollected = transactions.reduce((sum, t) => sum + t.advance, 0);
+  // Use actualAmountReturned if available, otherwise fall back to advance (for older transactions)
   const totalAdvanceReturned = transactions
     .filter(t => t.status === 'advance_returned')
-    .reduce((sum, t) => sum + t.advance, 0);
+    .reduce((sum, t) => sum + (t.actualAmountReturned ?? t.advance), 0);
+  const totalDeductions = transactions
+    .filter(t => t.status === 'advance_returned' && t.totalDeduction)
+    .reduce((sum, t) => sum + (t.totalDeduction ?? 0), 0);
   const activeAdvance = transactions
     .filter(t => t.status === 'active')
     .reduce((sum, t) => sum + t.advance, 0);
 
-  // Cash to hand over = Revenue + Pending advances (still held, not yet returned)
-  const cashToHandOver = totalSales + activeAdvance;
+  // Cash to hand over = Revenue + Pending advances + Deductions kept
+  // (Deductions = Advance Collected - Advance Actually Returned for completed transactions)
+  const cashToHandOver = totalSales + activeAdvance + totalDeductions;
 
   // Filter transactions based on status
   const filteredTransactions = statusFilter === 'all'
@@ -144,7 +152,7 @@ export default function MySummary() {
           </div>
 
           {/* Summary Cards */}
-          <div className="grid grid-cols-2 gap-3 mb-6">
+          <div className="grid grid-cols-2 gap-3 mb-3">
             <div className="bg-blue-50 rounded-xl p-4 text-center">
               <p className="text-3xl font-bold text-blue-600">{totalTransactions}</p>
               <p className="text-sm text-blue-700">Transactions</p>
@@ -153,13 +161,19 @@ export default function MySummary() {
               <p className="text-2xl font-bold text-green-600">₹{totalSales.toFixed(0)}</p>
               <p className="text-sm text-green-700">Revenue</p>
             </div>
+          </div>
+          <div className="grid grid-cols-3 gap-3 mb-6">
             <div className="bg-purple-50 rounded-xl p-4 text-center">
-              <p className="text-2xl font-bold text-purple-600">₹{totalAdvanceCollected.toFixed(0)}</p>
-              <p className="text-sm text-purple-700">Advance Collected</p>
+              <p className="text-xl font-bold text-purple-600">₹{totalAdvanceCollected.toFixed(0)}</p>
+              <p className="text-xs text-purple-700">Adv. Collected</p>
             </div>
             <div className="bg-orange-50 rounded-xl p-4 text-center">
-              <p className="text-2xl font-bold text-orange-600">₹{totalAdvanceReturned.toFixed(0)}</p>
-              <p className="text-sm text-orange-700">Advance Returned</p>
+              <p className="text-xl font-bold text-orange-600">₹{totalAdvanceReturned.toFixed(0)}</p>
+              <p className="text-xs text-orange-700">Adv. Returned</p>
+            </div>
+            <div className="bg-red-50 rounded-xl p-4 text-center">
+              <p className="text-xl font-bold text-red-600">₹{totalDeductions.toFixed(0)}</p>
+              <p className="text-xs text-red-700">Deductions</p>
             </div>
           </div>
 
@@ -167,7 +181,11 @@ export default function MySummary() {
           <div className="bg-green-600 rounded-xl p-5 mb-6 text-white text-center">
             <p className="text-sm opacity-90 mb-1">Cash to Hand Over</p>
             <p className="text-4xl font-bold">₹{cashToHandOver.toFixed(2)}</p>
-            <p className="text-xs opacity-75 mt-2">(Revenue + Pending Advances)</p>
+            <p className="text-xs opacity-75 mt-2">
+              {totalDeductions > 0
+                ? '(Revenue + Pending Advances + Deductions)'
+                : '(Revenue + Pending Advances)'}
+            </p>
           </div>
 
           {/* Pending Advances Info */}
@@ -240,14 +258,17 @@ export default function MySummary() {
           ) : (
             <div className="space-y-3">
               {filteredTransactions.map(transaction => (
-                <div key={transaction.id} className="bg-white rounded-xl p-4 shadow-[0_2px_10px_rgba(0,0,0,0.08)]">
+                <div key={transaction.id} className={`bg-white rounded-xl p-4 shadow-[0_2px_10px_rgba(0,0,0,0.08)] ${transaction.isComplimentary ? 'border-l-4 border-purple-400' : ''}`}>
                   <div className="flex justify-between items-start mb-2">
                     <div>
                       <div className="flex items-center gap-2">
                         <p className="font-medium text-gray-800">{transaction.customerName}</p>
+                        {transaction.isComplimentary && (
+                          <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full font-medium">VIP</span>
+                        )}
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                           transaction.status === 'active'
-                            ? 'bg-purple-100 text-purple-700'
+                            ? 'bg-blue-100 text-blue-700'
                             : 'bg-orange-100 text-orange-700'
                         }`}>
                           {transaction.status === 'active' ? 'Active' : 'Returned'}
@@ -256,15 +277,39 @@ export default function MySummary() {
                       <p className="text-sm text-gray-500">+91 {transaction.customerPhone}</p>
                     </div>
                     <div className="text-right">
-                      <p className="font-semibold text-green-600">₹{transaction.totalDue.toFixed(2)}</p>
-                      <p className="text-xs text-gray-500">
-                        {new Date(transaction.createdAt).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}
-                      </p>
+                      {transaction.isComplimentary ? (
+                        <>
+                          <p className="font-semibold text-purple-600">₹0.00</p>
+                          <p className="text-xs text-purple-400">Complimentary</p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="font-semibold text-green-600">
+                            ₹{transaction.status === 'advance_returned'
+                              ? (transaction.subtotal + (transaction.totalDeduction ?? 0)).toFixed(2)
+                              : transaction.totalDue.toFixed(2)}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {new Date(transaction.createdAt).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}
+                          </p>
+                        </>
+                      )}
                     </div>
                   </div>
                   <div className="flex justify-between items-center text-sm text-gray-500 pt-2 border-t border-gray-100">
                     <span>Receipt: HC-{transaction.id.slice(-8).toUpperCase()}</span>
-                    <span>Advance: ₹{transaction.advance.toFixed(0)}</span>
+                    {transaction.isComplimentary ? (
+                      <span className="text-purple-500">VIP - No payment</span>
+                    ) : transaction.status === 'advance_returned' && transaction.actualAmountReturned !== null ? (
+                      <span>
+                        Returned: ₹{transaction.actualAmountReturned.toFixed(0)}
+                        {transaction.totalDeduction && transaction.totalDeduction > 0 && (
+                          <span className="text-red-500 ml-1">(-₹{transaction.totalDeduction.toFixed(0)})</span>
+                        )}
+                      </span>
+                    ) : (
+                      <span>Advance: ₹{transaction.advance.toFixed(0)}</span>
+                    )}
                   </div>
                 </div>
               ))}

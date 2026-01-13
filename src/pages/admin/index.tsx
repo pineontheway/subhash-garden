@@ -38,6 +38,25 @@ type Transaction = {
   status: 'active' | 'advance_returned';
   advanceReturnedAt: string | null;
   advanceReturnedByName: string | null;
+  returnDetails: string | null;
+  totalDeduction: number | null;
+  actualAmountReturned: number | null;
+  isComplimentary: boolean;
+};
+
+type ItemReturnEntry = {
+  type: 'maleCostume' | 'femaleCostume' | 'kidsCostume' | 'tube' | 'locker';
+  rented: number;
+  returnedGood: number;
+  returnedDamaged: number;
+  lost: number;
+  deduction: number;
+};
+
+type ReturnDetails = {
+  items: ItemReturnEntry[];
+  totalDeduction: number;
+  notes?: string;
 };
 
 export default function AdminDashboard() {
@@ -200,44 +219,126 @@ export default function AdminDashboard() {
   // Calculate summary for filtered transactions
   const filteredTotal = transactions.reduce((sum, t) => sum + t.subtotal, 0);
   const filteredAdvanceCollected = transactions.reduce((sum, t) => sum + t.advance, 0);
+  // Use actualAmountReturned if available, otherwise fall back to advance
   const filteredAdvanceReturned = transactions
     .filter(t => t.status === 'advance_returned')
-    .reduce((sum, t) => sum + t.advance, 0);
+    .reduce((sum, t) => sum + (t.actualAmountReturned ?? t.advance), 0);
   const filteredActiveAdvance = transactions
     .filter(t => t.status === 'active')
     .reduce((sum, t) => sum + t.advance, 0);
 
-  // Calculate inventory counts
-  const inventoryData = {
-    maleCostume: {
-      givenOut: inventoryTransactions.reduce((sum, t) => sum + t.maleCostume, 0),
-      returned: inventoryTransactions.filter(t => t.status === 'advance_returned').reduce((sum, t) => sum + t.maleCostume, 0),
-      stillOut: inventoryTransactions.filter(t => t.status === 'active').reduce((sum, t) => sum + t.maleCostume, 0),
-    },
-    femaleCostume: {
-      givenOut: inventoryTransactions.reduce((sum, t) => sum + t.femaleCostume, 0),
-      returned: inventoryTransactions.filter(t => t.status === 'advance_returned').reduce((sum, t) => sum + t.femaleCostume, 0),
-      stillOut: inventoryTransactions.filter(t => t.status === 'active').reduce((sum, t) => sum + t.femaleCostume, 0),
-    },
-    kidsCostume: {
-      givenOut: inventoryTransactions.reduce((sum, t) => sum + t.kidsCostume, 0),
-      returned: inventoryTransactions.filter(t => t.status === 'advance_returned').reduce((sum, t) => sum + t.kidsCostume, 0),
-      stillOut: inventoryTransactions.filter(t => t.status === 'active').reduce((sum, t) => sum + t.kidsCostume, 0),
-    },
-    tube: {
-      givenOut: inventoryTransactions.reduce((sum, t) => sum + t.tube, 0),
-      returned: inventoryTransactions.filter(t => t.status === 'advance_returned').reduce((sum, t) => sum + t.tube, 0),
-      stillOut: inventoryTransactions.filter(t => t.status === 'active').reduce((sum, t) => sum + t.tube, 0),
-    },
-    locker: {
-      givenOut: inventoryTransactions.reduce((sum, t) => sum + t.locker, 0),
-      returned: inventoryTransactions.filter(t => t.status === 'advance_returned').reduce((sum, t) => sum + t.locker, 0),
-      stillOut: inventoryTransactions.filter(t => t.status === 'active').reduce((sum, t) => sum + t.locker, 0),
-    },
-  };
+  // Calculate damage analytics
+  const damageAnalytics = (() => {
+    let totalDeductions = 0;
+    let damagedItems = { maleCostume: 0, femaleCostume: 0, kidsCostume: 0, tube: 0, locker: 0 };
+    let lostItems = { maleCostume: 0, femaleCostume: 0, kidsCostume: 0, tube: 0, locker: 0 };
+    const damageRecords: Array<{
+      transactionId: string;
+      customerName: string;
+      date: string;
+      items: Array<{ type: string; damaged: number; lost: number; deduction: number }>;
+      totalDeduction: number;
+      notes?: string;
+    }> = [];
+
+    transactions.forEach(t => {
+      if (t.returnDetails && t.totalDeduction && t.totalDeduction > 0) {
+        try {
+          const details: ReturnDetails = JSON.parse(t.returnDetails);
+          totalDeductions += t.totalDeduction;
+
+          const itemsWithDamage: Array<{ type: string; damaged: number; lost: number; deduction: number }> = [];
+
+          details.items.forEach(item => {
+            if (item.returnedDamaged > 0 || item.lost > 0) {
+              damagedItems[item.type] += item.returnedDamaged;
+              lostItems[item.type] += item.lost;
+              itemsWithDamage.push({
+                type: item.type,
+                damaged: item.returnedDamaged,
+                lost: item.lost,
+                deduction: item.deduction,
+              });
+            }
+          });
+
+          if (itemsWithDamage.length > 0) {
+            damageRecords.push({
+              transactionId: t.id,
+              customerName: t.customerName,
+              date: t.advanceReturnedAt || t.createdAt,
+              items: itemsWithDamage,
+              totalDeduction: t.totalDeduction,
+              notes: details.notes,
+            });
+          }
+        } catch (e) {
+          console.error('Error parsing return details:', e);
+        }
+      }
+    });
+
+    return {
+      totalDeductions,
+      damagedItems,
+      lostItems,
+      damageRecords,
+      totalDamagedCount: Object.values(damagedItems).reduce((a, b) => a + b, 0),
+      totalLostCount: Object.values(lostItems).reduce((a, b) => a + b, 0),
+    };
+  })();
+
+  // Calculate inventory counts (accounting for lost items)
+  const inventoryData = (() => {
+    const itemTypes = ['maleCostume', 'femaleCostume', 'kidsCostume', 'tube', 'locker'] as const;
+    const data: Record<string, { givenOut: number; returned: number; lost: number; stillOut: number }> = {};
+
+    itemTypes.forEach(itemType => {
+      const fieldMap: Record<string, keyof Transaction> = {
+        maleCostume: 'maleCostume',
+        femaleCostume: 'femaleCostume',
+        kidsCostume: 'kidsCostume',
+        tube: 'tube',
+        locker: 'locker',
+      };
+
+      const field = fieldMap[itemType];
+      const givenOut = inventoryTransactions.reduce((sum, t) => sum + (t[field] as number), 0);
+      const stillOut = inventoryTransactions.filter(t => t.status === 'active').reduce((sum, t) => sum + (t[field] as number), 0);
+
+      // Calculate actual returned and lost from returnDetails
+      let actualReturned = 0;
+      let lost = 0;
+
+      inventoryTransactions.filter(t => t.status === 'advance_returned').forEach(t => {
+        if (t.returnDetails) {
+          try {
+            const details: ReturnDetails = JSON.parse(t.returnDetails);
+            const item = details.items.find(i => i.type === itemType);
+            if (item) {
+              actualReturned += item.returnedGood + item.returnedDamaged;
+              lost += item.lost;
+            }
+          } catch (e) {
+            // Fallback for old transactions without returnDetails
+            actualReturned += t[field] as number;
+          }
+        } else {
+          // Fallback for old transactions without returnDetails
+          actualReturned += t[field] as number;
+        }
+      });
+
+      data[itemType] = { givenOut, returned: actualReturned, lost, stillOut };
+    });
+
+    return data;
+  })();
 
   const totalItemsOut = inventoryData.maleCostume.stillOut + inventoryData.femaleCostume.stillOut +
     inventoryData.kidsCostume.stillOut + inventoryData.tube.stillOut + inventoryData.locker.stillOut;
+  const totalItemsLost = inventoryData.maleCostume.lost + inventoryData.femaleCostume.lost +
+    inventoryData.kidsCostume.lost + inventoryData.tube.lost + inventoryData.locker.lost;
 
   // Quick date filter helpers
   const setToday = () => {
@@ -619,6 +720,83 @@ export default function AdminDashboard() {
                     </div>
                   </div>
 
+                  {/* Damage Analytics */}
+                  {(damageAnalytics.totalDamagedCount > 0 || damageAnalytics.totalLostCount > 0) && (
+                    <div className="bg-red-50 rounded-xl p-4">
+                      <h3 className="font-medium text-red-800 mb-3 flex items-center gap-2">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        Damage & Loss Report
+                      </h3>
+                      <div className="grid grid-cols-3 gap-2 text-center mb-4">
+                        <div className="bg-white/50 rounded-lg p-2">
+                          <p className="text-lg font-bold text-red-700">₹{damageAnalytics.totalDeductions.toFixed(0)}</p>
+                          <p className="text-xs text-red-800">Total Deductions</p>
+                        </div>
+                        <div className="bg-white/50 rounded-lg p-2">
+                          <p className="text-lg font-bold text-orange-600">{damageAnalytics.totalDamagedCount}</p>
+                          <p className="text-xs text-orange-700">Items Damaged</p>
+                        </div>
+                        <div className="bg-white/50 rounded-lg p-2">
+                          <p className="text-lg font-bold text-gray-700">{damageAnalytics.totalLostCount}</p>
+                          <p className="text-xs text-gray-600">Items Lost</p>
+                        </div>
+                      </div>
+
+                      {/* Damage by item type */}
+                      <div className="bg-white/50 rounded-lg p-3 mb-3">
+                        <p className="text-xs font-medium text-red-800 mb-2">Breakdown by Item Type</p>
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          {Object.entries(damageAnalytics.damagedItems).map(([type, count]) => {
+                            const lostCount = damageAnalytics.lostItems[type as keyof typeof damageAnalytics.lostItems];
+                            if (count === 0 && lostCount === 0) return null;
+                            const labelMap: Record<string, string> = {
+                              maleCostume: 'Male Costume',
+                              femaleCostume: 'Female Costume',
+                              kidsCostume: 'Kids Costume',
+                              tube: 'Tube',
+                              locker: 'Locker',
+                            };
+                            return (
+                              <div key={type} className="flex justify-between bg-white rounded px-2 py-1">
+                                <span className="text-gray-700">{labelMap[type]}</span>
+                                <span>
+                                  {count > 0 && <span className="text-orange-600">{count} dmg</span>}
+                                  {count > 0 && lostCount > 0 && <span className="text-gray-400"> / </span>}
+                                  {lostCount > 0 && <span className="text-gray-600">{lostCount} lost</span>}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Recent damage records */}
+                      {damageAnalytics.damageRecords.length > 0 && (
+                        <div>
+                          <p className="text-xs font-medium text-red-800 mb-2">Recent Damage Records</p>
+                          <div className="space-y-2 max-h-48 overflow-y-auto">
+                            {damageAnalytics.damageRecords.slice(0, 10).map((record, i) => (
+                              <div key={i} className="bg-white rounded-lg p-2 text-xs">
+                                <div className="flex justify-between items-start mb-1">
+                                  <span className="font-medium text-gray-800">{record.customerName}</span>
+                                  <span className="text-red-600 font-medium">-₹{record.totalDeduction.toFixed(0)}</span>
+                                </div>
+                                <div className="text-gray-500">
+                                  {new Date(record.date).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}
+                                </div>
+                                {record.notes && (
+                                  <div className="text-gray-600 italic mt-1">"{record.notes}"</div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* Status Filter */}
                   <div className="flex gap-2">
                     <button
@@ -663,14 +841,17 @@ export default function AdminDashboard() {
                   ) : (
                     <div className="space-y-3">
                       {transactions.slice(0, 20).map(transaction => (
-                        <div key={transaction.id} className="bg-white rounded-xl p-4 shadow-[0_2px_10px_rgba(0,0,0,0.08)]">
+                        <div key={transaction.id} className={`bg-white rounded-xl p-4 shadow-[0_2px_10px_rgba(0,0,0,0.08)] ${transaction.isComplimentary ? 'border-l-4 border-purple-400' : ''}`}>
                           <div className="flex justify-between items-start mb-2">
                             <div>
                               <div className="flex items-center gap-2">
                                 <p className="font-medium text-gray-800">{transaction.customerName}</p>
+                                {transaction.isComplimentary && (
+                                  <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full font-medium">VIP</span>
+                                )}
                                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                                   transaction.status === 'active'
-                                    ? 'bg-purple-100 text-purple-700'
+                                    ? 'bg-blue-100 text-blue-700'
                                     : 'bg-orange-100 text-orange-700'
                                 }`}>
                                   {transaction.status === 'active' ? 'Active' : 'Returned'}
@@ -679,19 +860,41 @@ export default function AdminDashboard() {
                               <p className="text-sm text-gray-500">+91 {transaction.customerPhone}</p>
                             </div>
                             <div className="text-right">
-                              <p className="font-semibold text-green-600">₹{transaction.totalDue.toFixed(2)}</p>
-                              <p className="text-xs text-gray-500">
-                                {new Date(transaction.createdAt).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}
-                              </p>
+                              {transaction.isComplimentary ? (
+                                <>
+                                  <p className="font-semibold text-purple-600">₹0.00</p>
+                                  <p className="text-xs text-purple-400">Complimentary</p>
+                                </>
+                              ) : (
+                                <>
+                                  <p className="font-semibold text-green-600">
+                                    ₹{transaction.status === 'advance_returned'
+                                      ? (transaction.subtotal + (transaction.totalDeduction ?? 0)).toFixed(2)
+                                      : transaction.totalDue.toFixed(2)}
+                                  </p>
+                                  <p className="text-xs text-gray-500">
+                                    {new Date(transaction.createdAt).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}
+                                  </p>
+                                </>
+                              )}
                             </div>
                           </div>
                           <div className="flex justify-between items-center text-sm text-gray-500">
                             <span>Cashier: {transaction.cashierName}</span>
-                            <span>Advance: ₹{transaction.advance.toFixed(2)}</span>
+                            {transaction.isComplimentary ? (
+                              <span className="text-purple-500">VIP - No payment</span>
+                            ) : (
+                              <span>Advance: ₹{transaction.advance.toFixed(2)}</span>
+                            )}
                           </div>
                           {transaction.status === 'advance_returned' && transaction.advanceReturnedByName && (
                             <div className="mt-2 pt-2 border-t border-gray-100 text-xs text-orange-600">
                               Returned by {transaction.advanceReturnedByName} on {new Date(transaction.advanceReturnedAt!).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}
+                              {!transaction.isComplimentary && transaction.totalDeduction && transaction.totalDeduction > 0 && (
+                                <span className="ml-2 text-red-600 font-medium">
+                                  (Deduction: ₹{transaction.totalDeduction.toFixed(0)})
+                                </span>
+                              )}
                             </div>
                           )}
                         </div>
@@ -766,11 +969,18 @@ export default function AdminDashboard() {
                     </div>
                   </div>
 
-                  {/* Summary Card */}
-                  <div className="bg-orange-500 rounded-xl p-5 text-white text-center">
-                    <p className="text-sm opacity-90 mb-1">{getInvDateLabel()} Items Still Out</p>
-                    <p className="text-4xl font-bold">{totalItemsOut}</p>
-                    <p className="text-xs opacity-75 mt-2">Items yet to be returned by customers</p>
+                  {/* Summary Cards */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-orange-500 rounded-xl p-5 text-white text-center">
+                      <p className="text-sm opacity-90 mb-1">{getInvDateLabel()} Items Still Out</p>
+                      <p className="text-4xl font-bold">{totalItemsOut}</p>
+                      <p className="text-xs opacity-75 mt-2">With customers</p>
+                    </div>
+                    <div className="bg-red-500 rounded-xl p-5 text-white text-center">
+                      <p className="text-sm opacity-90 mb-1">{getInvDateLabel()} Items Lost</p>
+                      <p className="text-4xl font-bold">{totalItemsLost}</p>
+                      <p className="text-xs opacity-75 mt-2">Not returned</p>
+                    </div>
                   </div>
 
                   {/* Inventory Table */}
@@ -783,17 +993,23 @@ export default function AdminDashboard() {
                         <thead className="bg-gray-50">
                           <tr>
                             <th className="text-left py-3 px-4 text-sm font-medium text-gray-600">Item</th>
-                            <th className="text-center py-3 px-4 text-sm font-medium text-blue-600">Given Out</th>
-                            <th className="text-center py-3 px-4 text-sm font-medium text-green-600">Returned</th>
-                            <th className="text-center py-3 px-4 text-sm font-medium text-orange-600">Still Out</th>
+                            <th className="text-center py-3 px-3 text-sm font-medium text-blue-600">Given Out</th>
+                            <th className="text-center py-3 px-3 text-sm font-medium text-green-600">Returned</th>
+                            <th className="text-center py-3 px-3 text-sm font-medium text-red-600">Lost</th>
+                            <th className="text-center py-3 px-3 text-sm font-medium text-orange-600">Still Out</th>
                           </tr>
                         </thead>
                         <tbody>
                           <tr className="border-t border-gray-100">
                             <td className="py-3 px-4 text-gray-800">Male Costume</td>
-                            <td className="py-3 px-4 text-center text-blue-600 font-medium">{inventoryData.maleCostume.givenOut}</td>
-                            <td className="py-3 px-4 text-center text-green-600 font-medium">{inventoryData.maleCostume.returned}</td>
-                            <td className="py-3 px-4 text-center">
+                            <td className="py-3 px-3 text-center text-blue-600 font-medium">{inventoryData.maleCostume.givenOut}</td>
+                            <td className="py-3 px-3 text-center text-green-600 font-medium">{inventoryData.maleCostume.returned}</td>
+                            <td className="py-3 px-3 text-center">
+                              <span className={`px-2 py-1 rounded-full text-sm font-medium ${inventoryData.maleCostume.lost > 0 ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}`}>
+                                {inventoryData.maleCostume.lost}
+                              </span>
+                            </td>
+                            <td className="py-3 px-3 text-center">
                               <span className={`px-2 py-1 rounded-full text-sm font-medium ${inventoryData.maleCostume.stillOut > 0 ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600'}`}>
                                 {inventoryData.maleCostume.stillOut}
                               </span>
@@ -801,9 +1017,14 @@ export default function AdminDashboard() {
                           </tr>
                           <tr className="border-t border-gray-100">
                             <td className="py-3 px-4 text-gray-800">Female Costume</td>
-                            <td className="py-3 px-4 text-center text-blue-600 font-medium">{inventoryData.femaleCostume.givenOut}</td>
-                            <td className="py-3 px-4 text-center text-green-600 font-medium">{inventoryData.femaleCostume.returned}</td>
-                            <td className="py-3 px-4 text-center">
+                            <td className="py-3 px-3 text-center text-blue-600 font-medium">{inventoryData.femaleCostume.givenOut}</td>
+                            <td className="py-3 px-3 text-center text-green-600 font-medium">{inventoryData.femaleCostume.returned}</td>
+                            <td className="py-3 px-3 text-center">
+                              <span className={`px-2 py-1 rounded-full text-sm font-medium ${inventoryData.femaleCostume.lost > 0 ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}`}>
+                                {inventoryData.femaleCostume.lost}
+                              </span>
+                            </td>
+                            <td className="py-3 px-3 text-center">
                               <span className={`px-2 py-1 rounded-full text-sm font-medium ${inventoryData.femaleCostume.stillOut > 0 ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600'}`}>
                                 {inventoryData.femaleCostume.stillOut}
                               </span>
@@ -811,9 +1032,14 @@ export default function AdminDashboard() {
                           </tr>
                           <tr className="border-t border-gray-100">
                             <td className="py-3 px-4 text-gray-800">Kids Costume</td>
-                            <td className="py-3 px-4 text-center text-blue-600 font-medium">{inventoryData.kidsCostume.givenOut}</td>
-                            <td className="py-3 px-4 text-center text-green-600 font-medium">{inventoryData.kidsCostume.returned}</td>
-                            <td className="py-3 px-4 text-center">
+                            <td className="py-3 px-3 text-center text-blue-600 font-medium">{inventoryData.kidsCostume.givenOut}</td>
+                            <td className="py-3 px-3 text-center text-green-600 font-medium">{inventoryData.kidsCostume.returned}</td>
+                            <td className="py-3 px-3 text-center">
+                              <span className={`px-2 py-1 rounded-full text-sm font-medium ${inventoryData.kidsCostume.lost > 0 ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}`}>
+                                {inventoryData.kidsCostume.lost}
+                              </span>
+                            </td>
+                            <td className="py-3 px-3 text-center">
                               <span className={`px-2 py-1 rounded-full text-sm font-medium ${inventoryData.kidsCostume.stillOut > 0 ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600'}`}>
                                 {inventoryData.kidsCostume.stillOut}
                               </span>
@@ -821,9 +1047,14 @@ export default function AdminDashboard() {
                           </tr>
                           <tr className="border-t border-gray-100">
                             <td className="py-3 px-4 text-gray-800">Tube</td>
-                            <td className="py-3 px-4 text-center text-blue-600 font-medium">{inventoryData.tube.givenOut}</td>
-                            <td className="py-3 px-4 text-center text-green-600 font-medium">{inventoryData.tube.returned}</td>
-                            <td className="py-3 px-4 text-center">
+                            <td className="py-3 px-3 text-center text-blue-600 font-medium">{inventoryData.tube.givenOut}</td>
+                            <td className="py-3 px-3 text-center text-green-600 font-medium">{inventoryData.tube.returned}</td>
+                            <td className="py-3 px-3 text-center">
+                              <span className={`px-2 py-1 rounded-full text-sm font-medium ${inventoryData.tube.lost > 0 ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}`}>
+                                {inventoryData.tube.lost}
+                              </span>
+                            </td>
+                            <td className="py-3 px-3 text-center">
                               <span className={`px-2 py-1 rounded-full text-sm font-medium ${inventoryData.tube.stillOut > 0 ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600'}`}>
                                 {inventoryData.tube.stillOut}
                               </span>
@@ -831,9 +1062,14 @@ export default function AdminDashboard() {
                           </tr>
                           <tr className="border-t border-gray-100">
                             <td className="py-3 px-4 text-gray-800">Locker</td>
-                            <td className="py-3 px-4 text-center text-blue-600 font-medium">{inventoryData.locker.givenOut}</td>
-                            <td className="py-3 px-4 text-center text-green-600 font-medium">{inventoryData.locker.returned}</td>
-                            <td className="py-3 px-4 text-center">
+                            <td className="py-3 px-3 text-center text-blue-600 font-medium">{inventoryData.locker.givenOut}</td>
+                            <td className="py-3 px-3 text-center text-green-600 font-medium">{inventoryData.locker.returned}</td>
+                            <td className="py-3 px-3 text-center">
+                              <span className={`px-2 py-1 rounded-full text-sm font-medium ${inventoryData.locker.lost > 0 ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}`}>
+                                {inventoryData.locker.lost}
+                              </span>
+                            </td>
+                            <td className="py-3 px-3 text-center">
                               <span className={`px-2 py-1 rounded-full text-sm font-medium ${inventoryData.locker.stillOut > 0 ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600'}`}>
                                 {inventoryData.locker.stillOut}
                               </span>
@@ -843,13 +1079,18 @@ export default function AdminDashboard() {
                         <tfoot className="bg-gray-50 border-t-2 border-gray-200">
                           <tr>
                             <td className="py-3 px-4 font-semibold text-gray-800">Total</td>
-                            <td className="py-3 px-4 text-center font-bold text-blue-600">
+                            <td className="py-3 px-3 text-center font-bold text-blue-600">
                               {inventoryData.maleCostume.givenOut + inventoryData.femaleCostume.givenOut + inventoryData.kidsCostume.givenOut + inventoryData.tube.givenOut + inventoryData.locker.givenOut}
                             </td>
-                            <td className="py-3 px-4 text-center font-bold text-green-600">
+                            <td className="py-3 px-3 text-center font-bold text-green-600">
                               {inventoryData.maleCostume.returned + inventoryData.femaleCostume.returned + inventoryData.kidsCostume.returned + inventoryData.tube.returned + inventoryData.locker.returned}
                             </td>
-                            <td className="py-3 px-4 text-center">
+                            <td className="py-3 px-3 text-center">
+                              <span className="px-3 py-1 rounded-full text-sm font-bold bg-red-500 text-white">
+                                {totalItemsLost}
+                              </span>
+                            </td>
+                            <td className="py-3 px-3 text-center">
                               <span className="px-3 py-1 rounded-full text-sm font-bold bg-orange-500 text-white">
                                 {totalItemsOut}
                               </span>
@@ -870,8 +1111,9 @@ export default function AdminDashboard() {
                         <p className="font-medium text-blue-800">How to read this data</p>
                         <p className="text-sm text-blue-700 mt-1">
                           <strong>Given Out:</strong> Total items rented in this period<br />
-                          <strong>Returned:</strong> Items that have been returned<br />
-                          <strong>Still Out:</strong> Items currently with customers (not yet returned)
+                          <strong>Returned:</strong> Items returned (good + damaged condition)<br />
+                          <strong>Lost:</strong> Items not returned by customers<br />
+                          <strong>Still Out:</strong> Items currently with customers (active rentals)
                         </p>
                       </div>
                     </div>
