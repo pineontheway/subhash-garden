@@ -862,8 +862,12 @@ export default function AdminDashboard() {
                             <div className="text-right">
                               {transaction.isComplimentary ? (
                                 <>
-                                  <p className="font-semibold text-purple-600">₹0.00</p>
-                                  <p className="text-xs text-purple-400">Complimentary</p>
+                                  <p className="font-semibold text-purple-600">
+                                    {transaction.advance > 0 ? `₹${transaction.advance.toFixed(2)}` : '₹0.00'}
+                                  </p>
+                                  <p className="text-xs text-purple-400">
+                                    {transaction.advance > 0 ? 'VIP Advance' : 'Complimentary'}
+                                  </p>
                                 </>
                               ) : (
                                 <>
@@ -882,7 +886,9 @@ export default function AdminDashboard() {
                           <div className="flex justify-between items-center text-sm text-gray-500">
                             <span>Cashier: {transaction.cashierName}</span>
                             {transaction.isComplimentary ? (
-                              <span className="text-purple-500">VIP - No payment</span>
+                              <span className="text-purple-500">
+                                {transaction.advance > 0 ? `Advance: ₹${transaction.advance.toFixed(2)}` : 'VIP - No payment'}
+                              </span>
                             ) : (
                               <span>Advance: ₹{transaction.advance.toFixed(2)}</span>
                             )}

@@ -146,10 +146,9 @@ export default function Checkout() {
 
     setSaving(true);
     try {
-      // For VIP, all amounts are 0
-      const finalSubtotal = isVIP ? 0 : subtotal;
-      const finalAdvance = isVIP ? 0 : advance;
-      const finalTotalDue = isVIP ? 0 : totalDue;
+      // VIP: subtotal calculated normally, advance is optional (can be 0)
+      // VIP totalDue = just the advance (they don't pay for items)
+      const finalTotalDue = isVIP ? advance : totalDue;
 
       const res = await fetch('/api/transactions', {
         method: 'POST',
@@ -162,8 +161,8 @@ export default function Checkout() {
           kidsCostume: items.kidsCostume,
           tube: items.tube,
           locker: items.locker,
-          subtotal: finalSubtotal,
-          advance: finalAdvance,
+          subtotal,
+          advance,
           totalDue: finalTotalDue,
           isComplimentary: isVIP,
         }),
@@ -181,9 +180,9 @@ export default function Checkout() {
           customerName: items.name,
           customerPhone: items.phone,
           cashierName: session.user.name || 'Unknown',
-          lineItems: isVIP ? lineItems.map(item => ({ ...item, price: 0 })) : lineItems,
-          subtotal: finalSubtotal,
-          advance: finalAdvance,
+          lineItems,
+          subtotal,
+          advance,
           totalDue: finalTotalDue,
           isVIP,
         });
@@ -272,11 +271,18 @@ export default function Checkout() {
             <div className="flex items-center justify-between">
               <div>
                 <span className="text-purple-800 font-medium">VIP / Complimentary</span>
-                <p className="text-purple-600 text-xs mt-0.5">No payment required</p>
+                <p className="text-purple-600 text-xs mt-0.5">No charge for items, advance optional</p>
               </div>
               <button
                 type="button"
-                onClick={() => setIsVIP(!isVIP)}
+                onClick={() => {
+                  if (!isVIP) {
+                    setAdvance(0); // Reset advance to 0 when enabling VIP
+                  } else {
+                    setAdvance(subtotal); // Restore advance to subtotal when disabling VIP
+                  }
+                  setIsVIP(!isVIP);
+                }}
                 className={`relative w-14 h-8 rounded-full transition-colors cursor-pointer ${
                   isVIP ? 'bg-purple-600' : 'bg-gray-300'
                 }`}
@@ -308,47 +314,45 @@ export default function Checkout() {
             </div>
           </div>
 
-          {/* Advance Card - Hidden for VIP */}
-          {!isVIP && (
-            <div className="bg-white rounded-2xl p-4 shadow-[0_4px_20px_rgba(0,0,0,0.08)]">
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-gray-800 font-medium">Advance</span>
-                <div className="flex items-center">
-                  <button
-                    type="button"
-                    onClick={() => setAdvance(Math.max(0, advance - 50))}
-                    className="w-10 h-8 bg-gray-200 text-gray-600 rounded-l flex items-center justify-center cursor-pointer hover:bg-gray-300"
-                  >
-                    −
-                  </button>
-                  <div className="h-8 px-3 bg-gray-100 flex items-center justify-center text-gray-800 font-medium min-w-[80px]">
-                    {advance.toFixed(2)}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setAdvance(advance + 50)}
-                    className="w-10 h-8 bg-green-600 text-white rounded-r flex items-center justify-center cursor-pointer hover:bg-green-700"
-                  >
-                    +
-                  </button>
+          {/* Advance Card */}
+          <div className={`rounded-2xl p-4 shadow-[0_4px_20px_rgba(0,0,0,0.08)] ${isVIP ? 'bg-purple-50' : 'bg-white'}`}>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <span className={`font-medium ${isVIP ? 'text-purple-800' : 'text-gray-800'}`}>
+                  {isVIP ? 'Advance (Optional)' : 'Advance'}
+                </span>
+                {isVIP && <p className="text-xs text-purple-600">Refundable deposit</p>}
+              </div>
+              <div className="flex items-center">
+                <button
+                  type="button"
+                  onClick={() => setAdvance(Math.max(0, advance - 50))}
+                  className="w-10 h-8 bg-gray-200 text-gray-600 rounded-l flex items-center justify-center cursor-pointer hover:bg-gray-300"
+                >
+                  −
+                </button>
+                <div className={`h-8 px-3 flex items-center justify-center font-medium min-w-[80px] ${isVIP ? 'bg-purple-100 text-purple-800' : 'bg-gray-100 text-gray-800'}`}>
+                  {advance.toFixed(2)}
                 </div>
-              </div>
-              <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-                <span className="text-gray-500">Total Amount</span>
-                <span className="text-green-600 font-semibold text-lg">₹{totalDue.toFixed(2)}</span>
-              </div>
-            </div>
-          )}
-
-          {/* VIP Summary */}
-          {isVIP && (
-            <div className="bg-purple-100 rounded-2xl p-4 shadow-[0_4px_20px_rgba(0,0,0,0.08)]">
-              <div className="flex items-center justify-between">
-                <span className="text-purple-800 font-medium">Total Amount</span>
-                <span className="text-purple-600 font-semibold text-lg">₹0.00 (VIP)</span>
+                <button
+                  type="button"
+                  onClick={() => setAdvance(advance + 50)}
+                  className={`w-10 h-8 text-white rounded-r flex items-center justify-center cursor-pointer ${isVIP ? 'bg-purple-600 hover:bg-purple-700' : 'bg-green-600 hover:bg-green-700'}`}
+                >
+                  +
+                </button>
               </div>
             </div>
-          )}
+            <div className={`flex items-center justify-between pt-3 border-t ${isVIP ? 'border-purple-200' : 'border-gray-100'}`}>
+              <span className={isVIP ? 'text-purple-700' : 'text-gray-500'}>
+                {isVIP ? 'Amount to Collect' : 'Total Amount'}
+              </span>
+              <span className={`font-semibold text-lg ${isVIP ? 'text-purple-600' : 'text-green-600'}`}>
+                ₹{isVIP ? advance.toFixed(2) : totalDue.toFixed(2)}
+                {isVIP && advance === 0 && <span className="text-sm ml-1">(VIP)</span>}
+              </span>
+            </div>
+          </div>
         </main>
 
         {/* Pay Button */}
@@ -363,7 +367,9 @@ export default function Checkout() {
                 : 'bg-green-700 hover:bg-green-800 active:bg-green-900'
             }`}
           >
-            {saving ? 'Processing...' : isVIP ? 'Complete (VIP)' : `Pay ₹${totalDue.toFixed(2)}`}
+            {saving ? 'Processing...' : isVIP
+              ? (advance > 0 ? `Collect ₹${advance.toFixed(2)} (VIP)` : 'Complete (VIP)')
+              : `Pay ₹${totalDue.toFixed(2)}`}
           </button>
         </div>
       </div>

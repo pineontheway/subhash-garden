@@ -279,8 +279,12 @@ export default function MySummary() {
                     <div className="text-right">
                       {transaction.isComplimentary ? (
                         <>
-                          <p className="font-semibold text-purple-600">₹0.00</p>
-                          <p className="text-xs text-purple-400">Complimentary</p>
+                          <p className="font-semibold text-purple-600">
+                            {transaction.advance > 0 ? `₹${transaction.advance.toFixed(2)}` : '₹0.00'}
+                          </p>
+                          <p className="text-xs text-purple-400">
+                            {transaction.advance > 0 ? 'VIP Advance' : 'Complimentary'}
+                          </p>
                         </>
                       ) : (
                         <>
@@ -299,7 +303,13 @@ export default function MySummary() {
                   <div className="flex justify-between items-center text-sm text-gray-500 pt-2 border-t border-gray-100">
                     <span>Receipt: HC-{transaction.id.slice(-8).toUpperCase()}</span>
                     {transaction.isComplimentary ? (
-                      <span className="text-purple-500">VIP - No payment</span>
+                      <span className="text-purple-500">
+                        {transaction.status === 'advance_returned' && transaction.advance > 0
+                          ? `Returned: ₹${transaction.actualAmountReturned?.toFixed(0) ?? transaction.advance.toFixed(0)}`
+                          : transaction.advance > 0
+                            ? `Advance: ₹${transaction.advance.toFixed(0)}`
+                            : 'VIP - No payment'}
+                      </span>
                     ) : transaction.status === 'advance_returned' && transaction.actualAmountReturned !== null ? (
                       <span>
                         Returned: ₹{transaction.actualAmountReturned.toFixed(0)}

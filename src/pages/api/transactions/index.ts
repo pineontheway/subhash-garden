@@ -117,8 +117,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           });
         }
 
-        // Validate deduction is provided when there are damaged or lost items
-        if ((item.returnedDamaged > 0 || item.lost > 0) && item.deduction <= 0) {
+        // Validate deduction is provided when there are damaged or lost items (skip for VIP)
+        if (!transaction.isComplimentary && (item.returnedDamaged > 0 || item.lost > 0) && item.deduction <= 0) {
           return res.status(400).json({
             error: `Deduction required for damaged/lost ${item.type}`
           });

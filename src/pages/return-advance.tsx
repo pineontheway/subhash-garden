@@ -23,18 +23,15 @@ type Transaction = {
 };
 
 type ItemReturnState = {
-  returnedGood: number;
-  returnedDamaged: number;
   lost: number;
-  deduction: number;
 };
 
-const ITEM_CONFIG: { type: ItemType; label: string; field: keyof Transaction }[] = [
-  { type: 'maleCostume', label: 'Male Costume', field: 'maleCostume' },
-  { type: 'femaleCostume', label: 'Female Costume', field: 'femaleCostume' },
-  { type: 'kidsCostume', label: 'Kids Costume', field: 'kidsCostume' },
-  { type: 'tube', label: 'Tube', field: 'tube' },
-  { type: 'locker', label: 'Locker', field: 'locker' },
+const ITEM_CONFIG: { type: ItemType; label: string; field: keyof Transaction; priceKey: string }[] = [
+  { type: 'maleCostume', label: 'Male Costume', field: 'maleCostume', priceKey: 'male_costume' },
+  { type: 'femaleCostume', label: 'Female Costume', field: 'femaleCostume', priceKey: 'female_costume' },
+  { type: 'kidsCostume', label: 'Kids Costume', field: 'kidsCostume', priceKey: 'kids_costume' },
+  { type: 'tube', label: 'Tube', field: 'tube', priceKey: 'tube' },
+  { type: 'locker', label: 'Locker', field: 'locker', priceKey: 'locker' },
 ];
 
 export default function ReturnAdvance() {
@@ -49,36 +46,64 @@ export default function ReturnAdvance() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [returnedAmount, setReturnedAmount] = useState(0);
   const [totalDeductionReturned, setTotalDeductionReturned] = useState(0);
+  const [wasVIPTransaction, setWasVIPTransaction] = useState(false);
+  const [prices, setPrices] = useState<Record<string, number>>({});
 
-  // Item return tracking state
+  // Item return tracking state - simplified to just track lost items
   const [itemReturns, setItemReturns] = useState<Record<ItemType, ItemReturnState>>({
-    maleCostume: { returnedGood: 0, returnedDamaged: 0, lost: 0, deduction: 0 },
-    femaleCostume: { returnedGood: 0, returnedDamaged: 0, lost: 0, deduction: 0 },
-    kidsCostume: { returnedGood: 0, returnedDamaged: 0, lost: 0, deduction: 0 },
-    tube: { returnedGood: 0, returnedDamaged: 0, lost: 0, deduction: 0 },
-    locker: { returnedGood: 0, returnedDamaged: 0, lost: 0, deduction: 0 },
+    maleCostume: { lost: 0 },
+    femaleCostume: { lost: 0 },
+    kidsCostume: { lost: 0 },
+    tube: { lost: 0 },
+    locker: { lost: 0 },
   });
   const [deductionNotes, setDeductionNotes] = useState('');
+
+  // Fetch prices on mount
+  useEffect(() => {
+    async function fetchPrices() {
+      try {
+        const res = await fetch('/api/prices');
+        if (res.ok) {
+          const data = await res.json();
+          const priceMap: Record<string, number> = {};
+          data.forEach((item: { itemKey: string; price: number }) => {
+            priceMap[item.itemKey] = item.price;
+          });
+          setPrices(priceMap);
+        }
+      } catch (error) {
+        console.error('Error fetching prices:', error);
+      }
+    }
+    fetchPrices();
+  }, []);
 
   // Initialize item returns when transaction is selected
   useEffect(() => {
     if (selectedTransaction) {
       const initialState: Record<ItemType, ItemReturnState> = {
-        maleCostume: { returnedGood: selectedTransaction.maleCostume, returnedDamaged: 0, lost: 0, deduction: 0 },
-        femaleCostume: { returnedGood: selectedTransaction.femaleCostume, returnedDamaged: 0, lost: 0, deduction: 0 },
-        kidsCostume: { returnedGood: selectedTransaction.kidsCostume, returnedDamaged: 0, lost: 0, deduction: 0 },
-        tube: { returnedGood: selectedTransaction.tube, returnedDamaged: 0, lost: 0, deduction: 0 },
-        locker: { returnedGood: selectedTransaction.locker, returnedDamaged: 0, lost: 0, deduction: 0 },
+        maleCostume: { lost: 0 },
+        femaleCostume: { lost: 0 },
+        kidsCostume: { lost: 0 },
+        tube: { lost: 0 },
+        locker: { lost: 0 },
       };
       setItemReturns(initialState);
       setDeductionNotes('');
     }
   }, [selectedTransaction]);
 
-  // Calculate total deduction
+  // Calculate total deduction based on lost items × item price
   const totalDeduction = useMemo(() => {
-    return Object.values(itemReturns).reduce((sum, item) => sum + item.deduction, 0);
-  }, [itemReturns]);
+    let total = 0;
+    ITEM_CONFIG.forEach(({ type, priceKey }) => {
+      const lost = itemReturns[type].lost;
+      const price = prices[priceKey] || 0;
+      total += lost * price;
+    });
+    return total;
+  }, [itemReturns, prices]);
 
   // Calculate amount to return
   const amountToReturn = useMemo(() => {
@@ -86,25 +111,18 @@ export default function ReturnAdvance() {
     return Math.max(0, selectedTransaction.advance - totalDeduction);
   }, [selectedTransaction, totalDeduction]);
 
-  // Validation: check if all quantities add up and deductions are provided
+  // Validation: check lost doesn't exceed given
   const validationErrors = useMemo(() => {
     if (!selectedTransaction) return [];
     const errors: string[] = [];
 
     ITEM_CONFIG.forEach(({ type, label, field }) => {
-      const rented = selectedTransaction[field] as number;
-      if (rented === 0) return;
+      const given = selectedTransaction[field] as number;
+      if (given === 0) return;
 
-      const state = itemReturns[type];
-      const total = state.returnedGood + state.returnedDamaged + state.lost;
-
-      if (total !== rented) {
-        errors.push(`${label}: Total must equal ${rented} (currently ${total})`);
-      }
-
-      // VIP transactions don't need deduction
-      if (!selectedTransaction.isComplimentary && (state.returnedDamaged > 0 || state.lost > 0) && state.deduction <= 0) {
-        errors.push(`${label}: Enter deduction amount for damaged/lost items`);
+      const lost = itemReturns[type].lost;
+      if (lost > given) {
+        errors.push(`${label}: Lost (${lost}) cannot exceed given (${given})`);
       }
     });
 
@@ -159,17 +177,23 @@ export default function ReturnAdvance() {
 
     setReturning(true);
     try {
-      // Build return details
+      // Build return details (same deduction logic for VIP and regular)
       const items: ItemReturnEntry[] = ITEM_CONFIG
         .filter(({ field }) => (selectedTransaction[field] as number) > 0)
-        .map(({ type, field }) => ({
-          type,
-          rented: selectedTransaction[field] as number,
-          returnedGood: itemReturns[type].returnedGood,
-          returnedDamaged: itemReturns[type].returnedDamaged,
-          lost: itemReturns[type].lost,
-          deduction: itemReturns[type].deduction,
-        }));
+        .map(({ type, field, priceKey }) => {
+          const given = selectedTransaction[field] as number;
+          const lost = itemReturns[type].lost;
+          const returned = given - lost;
+          const price = prices[priceKey] || 0;
+          return {
+            type,
+            rented: given,
+            returnedGood: returned,
+            returnedDamaged: 0,
+            lost,
+            deduction: lost * price,
+          };
+        });
 
       const returnDetails: ReturnDetails = {
         items,
@@ -187,6 +211,7 @@ export default function ReturnAdvance() {
         const data = await res.json();
         setReturnedAmount(data.actualAmountReturned);
         setTotalDeductionReturned(data.totalDeduction);
+        setWasVIPTransaction(selectedTransaction.isComplimentary);
         setShowConfirm(false);
         setShowSuccess(true);
         // Remove from list
@@ -203,13 +228,10 @@ export default function ReturnAdvance() {
     setReturning(false);
   };
 
-  const updateItemReturn = (type: ItemType, field: keyof ItemReturnState, value: number) => {
+  const updateLostCount = (type: ItemType, value: number) => {
     setItemReturns(prev => ({
       ...prev,
-      [type]: {
-        ...prev[type],
-        [field]: value,
-      },
+      [type]: { lost: value },
     }));
   };
 
@@ -302,8 +324,12 @@ export default function ReturnAdvance() {
                     <div className="text-right">
                       {transaction.isComplimentary ? (
                         <>
-                          <p className="font-semibold text-purple-600">₹0.00</p>
-                          <p className="text-xs text-purple-400">Complimentary</p>
+                          <p className="font-semibold text-purple-600">
+                            {transaction.advance > 0 ? `₹${transaction.advance.toFixed(2)}` : '₹0.00'}
+                          </p>
+                          <p className="text-xs text-purple-400">
+                            {transaction.advance > 0 ? 'VIP Advance' : 'Complimentary'}
+                          </p>
                         </>
                       ) : (
                         <>
@@ -351,8 +377,8 @@ export default function ReturnAdvance() {
                 </div>
                 <p className="text-gray-500">
                   {selectedTransaction.isComplimentary
-                    ? 'Select item conditions for VIP checkout'
-                    : 'Select item conditions and enter deductions'}
+                    ? 'Mark any lost items for VIP checkout'
+                    : 'Mark any lost items to calculate deduction'}
                 </p>
               </div>
 
@@ -375,98 +401,50 @@ export default function ReturnAdvance() {
               {/* Item Selection */}
               <div className="mb-4">
                 <p className="text-sm font-medium text-gray-700 mb-3">Items to Collect:</p>
-                <div className="space-y-4">
-                  {ITEM_CONFIG.map(({ type, label, field }) => {
-                    const rented = selectedTransaction[field] as number;
-                    if (rented === 0) return null;
+                <div className="space-y-3">
+                  {ITEM_CONFIG.map(({ type, label, field, priceKey }) => {
+                    const given = selectedTransaction[field] as number;
+                    if (given === 0) return null;
 
-                    const state = itemReturns[type];
-                    const remaining = rented - state.returnedGood - state.returnedDamaged - state.lost;
-                    const needsDeduction = state.returnedDamaged > 0 || state.lost > 0;
+                    const lost = itemReturns[type].lost;
+                    const price = prices[priceKey] || 0;
+                    const deduction = lost * price;
 
                     return (
                       <div key={type} className="bg-gray-50 rounded-xl p-3">
-                        <div className="flex justify-between items-center mb-2">
-                          <span className="font-medium text-gray-800">{label}</span>
-                          <span className="text-sm text-gray-500">({rented} rented)</span>
-                        </div>
-
-                        <div className="grid grid-cols-3 gap-2 mb-2">
-                          {/* Good */}
-                          <div>
-                            <label className="block text-xs text-green-600 mb-1">Good</label>
-                            <select
-                              value={state.returnedGood}
-                              onChange={(e) => updateItemReturn(type, 'returnedGood', parseInt(e.target.value))}
-                              className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500"
-                            >
-                              {generateOptions(rented).map(n => (
-                                <option key={n} value={n}>{n}</option>
-                              ))}
-                            </select>
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <span className="font-medium text-gray-800">{label}</span>
+                            <p className="text-xs text-gray-500">₹{price} each</p>
                           </div>
-
-                          {/* Damaged */}
-                          <div>
-                            <label className="block text-xs text-orange-600 mb-1">Damaged</label>
-                            <select
-                              value={state.returnedDamaged}
-                              onChange={(e) => updateItemReturn(type, 'returnedDamaged', parseInt(e.target.value))}
-                              className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                            >
-                              {generateOptions(rented).map(n => (
-                                <option key={n} value={n}>{n}</option>
-                              ))}
-                            </select>
-                          </div>
-
-                          {/* Lost */}
-                          <div>
-                            <label className="block text-xs text-red-600 mb-1">Lost</label>
-                            <select
-                              value={state.lost}
-                              onChange={(e) => updateItemReturn(type, 'lost', parseInt(e.target.value))}
-                              className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500"
-                            >
-                              {generateOptions(rented).map(n => (
-                                <option key={n} value={n}>{n}</option>
-                              ))}
-                            </select>
-                          </div>
-                        </div>
-
-                        {/* Quantity validation hint */}
-                        {remaining !== 0 && (
-                          <p className={`text-xs ${remaining > 0 ? 'text-orange-600' : 'text-red-600'}`}>
-                            {remaining > 0 ? `${remaining} more to assign` : `${Math.abs(remaining)} over assigned`}
-                          </p>
-                        )}
-
-                        {/* Deduction input - only for non-VIP transactions */}
-                        {needsDeduction && !selectedTransaction.isComplimentary && (
-                          <div className="mt-2 pt-2 border-t border-gray-200">
-                            <label className="block text-xs text-gray-600 mb-1">
-                              Deduction for {state.returnedDamaged > 0 && state.lost > 0 ? 'damaged & lost' : state.returnedDamaged > 0 ? 'damaged' : 'lost'}
-                            </label>
-                            <div className="relative">
-                              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-500">₹</span>
-                              <input
-                                type="number"
-                                min="0"
-                                value={state.deduction || ''}
-                                onChange={(e) => updateItemReturn(type, 'deduction', parseFloat(e.target.value) || 0)}
-                                placeholder="Enter amount"
-                                className="w-full pl-6 pr-3 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                              />
+                          <div className="flex items-center gap-4">
+                            {/* Given (read-only) */}
+                            <div className="text-center">
+                              <p className="text-xs text-gray-500 mb-1">Given</p>
+                              <div className="w-12 h-9 bg-blue-100 rounded-lg flex items-center justify-center">
+                                <span className="font-semibold text-blue-700">{given}</span>
+                              </div>
+                            </div>
+                            {/* Lost (dropdown) */}
+                            <div className="text-center">
+                              <p className="text-xs text-red-600 mb-1">Lost</p>
+                              <select
+                                value={lost}
+                                onChange={(e) => updateLostCount(type, parseInt(e.target.value))}
+                                className="w-14 h-9 px-2 border border-gray-200 rounded-lg text-sm text-gray-900 font-medium text-center focus:outline-none focus:ring-2 focus:ring-red-500"
+                              >
+                                {generateOptions(given).map(n => (
+                                  <option key={n} value={n}>{n}</option>
+                                ))}
+                              </select>
                             </div>
                           </div>
-                        )}
-                        {/* VIP notice for damaged/lost items */}
-                        {needsDeduction && selectedTransaction.isComplimentary && (
-                          <div className="mt-2 pt-2 border-t border-gray-200">
-                            <p className="text-xs text-purple-600">
-                              VIP - No charge for {state.returnedDamaged > 0 && state.lost > 0 ? 'damaged/lost items' : state.returnedDamaged > 0 ? 'damaged items' : 'lost items'}
-                            </p>
+                        </div>
+                        {/* Auto-calculated deduction - same for VIP and regular */}
+                        {lost > 0 && (
+                          <div className="mt-2 pt-2 border-t border-gray-200 flex justify-between items-center">
+                            <span className="text-xs text-gray-600">Deduction ({lost} × ₹{price})</span>
+                            <span className="text-sm font-medium text-red-600">₹{deduction.toFixed(0)}</span>
                           </div>
                         )}
                       </div>
@@ -504,14 +482,28 @@ export default function ReturnAdvance() {
                 <div className="bg-purple-50 rounded-xl p-4 mb-6">
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-gray-600">Transaction Type</span>
-                    <span className="font-medium text-purple-700">VIP - Complimentary</span>
+                    <span className="font-medium text-purple-700">VIP</span>
                   </div>
+                  {selectedTransaction.advance > 0 && (
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-gray-600">Advance Collected</span>
+                      <span className="font-medium text-gray-800">₹{selectedTransaction.advance.toFixed(2)}</span>
+                    </div>
+                  )}
+                  {totalDeduction > 0 && (
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-red-600">Total Deduction</span>
+                      <span className="font-medium text-red-600">-₹{totalDeduction.toFixed(2)}</span>
+                    </div>
+                  )}
                   <div className="border-t border-purple-200 mt-2 pt-2">
                     <div className="flex justify-between items-center">
                       <span className="text-gray-800 font-medium">Amount to Return</span>
-                      <span className="text-2xl font-bold text-purple-600">₹0.00</span>
+                      <span className="text-2xl font-bold text-purple-600">₹{amountToReturn.toFixed(2)}</span>
                     </div>
-                    <p className="text-xs text-purple-500 mt-1">No payment required for VIP guests</p>
+                    {selectedTransaction.advance === 0 && totalDeduction === 0 && (
+                      <p className="text-xs text-purple-500 mt-1">No payment required for VIP guests</p>
+                    )}
                   </div>
                 </div>
               ) : (
@@ -556,7 +548,9 @@ export default function ReturnAdvance() {
                       : 'bg-green-700 hover:bg-green-800'
                   }`}
                 >
-                  {returning ? 'Processing...' : selectedTransaction.isComplimentary ? 'Complete (VIP)' : 'Return Advance'}
+                  {returning ? 'Processing...' : selectedTransaction.isComplimentary
+                  ? (amountToReturn > 0 ? `Return ₹${amountToReturn.toFixed(0)} (VIP)` : 'Complete (VIP)')
+                  : 'Return Advance'}
                 </button>
               </div>
             </div>
@@ -569,7 +563,7 @@ export default function ReturnAdvance() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-sm w-full">
             <div className="p-6 text-center">
-              {returnedAmount === 0 && totalDeductionReturned === 0 ? (
+              {wasVIPTransaction ? (
                 // VIP Success
                 <>
                   <div className="w-20 h-20 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -579,9 +573,20 @@ export default function ReturnAdvance() {
                   </div>
                   <h3 className="text-xl font-bold text-gray-800 mb-2">VIP Checkout Complete!</h3>
                   <p className="text-gray-500 mb-4">Items collected from VIP guest</p>
-                  <div className="bg-purple-50 rounded-lg p-3 mb-6">
-                    <p className="text-sm text-purple-700">No payment required</p>
-                  </div>
+                  {totalDeductionReturned > 0 && (
+                    <div className="bg-orange-50 rounded-lg p-3 mb-4 text-left">
+                      <p className="text-sm text-orange-800">
+                        Deduction applied: <span className="font-semibold">₹{totalDeductionReturned.toFixed(2)}</span>
+                      </p>
+                    </div>
+                  )}
+                  {returnedAmount > 0 || totalDeductionReturned > 0 ? (
+                    <p className="text-3xl font-bold text-purple-600 mb-6">₹{returnedAmount.toFixed(2)}</p>
+                  ) : (
+                    <div className="bg-purple-50 rounded-lg p-3 mb-6">
+                      <p className="text-sm text-purple-700">No payment required</p>
+                    </div>
+                  )}
                 </>
               ) : (
                 // Regular Success
@@ -611,9 +616,10 @@ export default function ReturnAdvance() {
                   setShowSuccess(false);
                   setSearchQuery('');
                   setTotalDeductionReturned(0);
+                  setWasVIPTransaction(false);
                 }}
                 className={`w-full py-3 text-white font-semibold rounded-xl cursor-pointer ${
-                  returnedAmount === 0 && totalDeductionReturned === 0
+                  wasVIPTransaction
                     ? 'bg-purple-600 hover:bg-purple-700'
                     : 'bg-green-700 hover:bg-green-800'
                 }`}
