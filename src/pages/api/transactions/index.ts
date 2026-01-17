@@ -6,6 +6,13 @@ import { transactions, users, type ReturnDetails } from '@/lib/schema';
 import { eq, desc, and, gte, lte, like, or } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 
+// Helper to get current timestamp in IST (Indian Standard Time)
+const getISTTimestamp = () => {
+  const now = new Date();
+  // Format: "2026-01-17 08:46:00" in IST
+  return now.toLocaleString('sv-SE', { timeZone: 'Asia/Kolkata' }).replace('T', ' ');
+};
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const session = await getServerSession(req, res, authOptions);
 
@@ -57,6 +64,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         cashierName: currentUser.name,
         status: 'active' as const,
         isComplimentary: isComplimentary || false,
+        createdAt: getISTTimestamp(), // Store in IST instead of UTC
       };
 
       await db.insert(transactions).values(transaction);
@@ -139,7 +147,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       await db.update(transactions)
         .set({
           status: 'advance_returned',
-          advanceReturnedAt: new Date().toISOString(),
+          advanceReturnedAt: getISTTimestamp(), // Store in IST instead of UTC
           advanceReturnedBy: currentUser.id,
           advanceReturnedByName: currentUser.name,
           returnDetails: JSON.stringify(returnDetails),

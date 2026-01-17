@@ -44,6 +44,23 @@ type Transaction = {
   isComplimentary: boolean;
 };
 
+type TicketTransaction = {
+  id: string;
+  customerName: string;
+  customerPhone: string;
+  vehicleNumber: string | null;
+  menTicket: number;
+  womenTicket: number;
+  childTicket: number;
+  subtotal: number;
+  totalDue: number;
+  paymentMethod: 'upi' | 'cash';
+  cashierId: string;
+  cashierName: string;
+  createdAt: string;
+  isComplimentary: boolean;
+};
+
 type ItemReturnEntry = {
   type: 'maleCostume' | 'femaleCostume' | 'kidsCostume' | 'tube' | 'locker';
   rented: number;
@@ -62,15 +79,19 @@ type ReturnDetails = {
 export default function AdminDashboard() {
   const router = useRouter();
   const { data: session, status } = useSession();
-  const [activeTab, setActiveTab] = useState<'users' | 'prices' | 'reports' | 'inventory'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'prices' | 'reports' | 'inventory' | 'settings'>('users');
   const [users, setUsers] = useState<User[]>([]);
   const [prices, setPrices] = useState<Price[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [ticketTransactions, setTicketTransactions] = useState<TicketTransaction[]>([]);
   const [inventoryTransactions, setInventoryTransactions] = useState<Transaction[]>([]);
+  const [reportFilter, setReportFilter] = useState<'all' | 'tickets' | 'clothes'>('all');
   const [loading, setLoading] = useState(true);
   const [editingPrice, setEditingPrice] = useState<string | null>(null);
   const [newPrice, setNewPrice] = useState<number>(0);
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'advance_returned'>('all');
+  const [settings, setSettings] = useState<Record<string, string>>({});
+  const [savingSettings, setSavingSettings] = useState(false);
 
   // Date filter - default to today (using Indian timezone)
   const getTodayDate = () => {
@@ -138,11 +159,31 @@ export default function AdminDashboard() {
           params.append('endDate', endDate.toISOString().split('T')[0]);
         }
         const queryString = params.toString();
-        const url = queryString ? `/api/transactions?${queryString}` : '/api/transactions';
-        const res = await fetch(url);
-        if (res.ok) {
-          const data = await res.json();
+
+        // Fetch clothes counter transactions
+        const clothesUrl = queryString ? `/api/transactions?${queryString}` : '/api/transactions';
+        const clothesRes = await fetch(clothesUrl);
+        if (clothesRes.ok) {
+          const data = await clothesRes.json();
           setTransactions(data);
+        }
+
+        // Fetch ticket counter transactions
+        const ticketParams = new URLSearchParams();
+        if (fromDate) {
+          ticketParams.append('startDate', fromDate);
+        }
+        if (toDate) {
+          const endDate = new Date(toDate);
+          endDate.setDate(endDate.getDate() + 1);
+          ticketParams.append('endDate', endDate.toISOString().split('T')[0]);
+        }
+        const ticketQueryString = ticketParams.toString();
+        const ticketUrl = ticketQueryString ? `/api/ticket-transactions?${ticketQueryString}` : '/api/ticket-transactions';
+        const ticketRes = await fetch(ticketUrl);
+        if (ticketRes.ok) {
+          const data = await ticketRes.json();
+          setTicketTransactions(data);
         }
       } else if (activeTab === 'inventory') {
         const params = new URLSearchParams();
@@ -161,6 +202,12 @@ export default function AdminDashboard() {
         if (res.ok) {
           const data = await res.json();
           setInventoryTransactions(data);
+        }
+      } else if (activeTab === 'settings') {
+        const res = await fetch('/api/settings');
+        if (res.ok) {
+          const data = await res.json();
+          setSettings(data);
         }
       }
     } catch (error) {
@@ -216,7 +263,24 @@ export default function AdminDashboard() {
     }
   };
 
-  // Calculate summary for filtered transactions
+  const updateSetting = async (key: string, value: string) => {
+    setSavingSettings(true);
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key, value }),
+      });
+      if (res.ok) {
+        setSettings(prev => ({ ...prev, [key]: value }));
+      }
+    } catch (error) {
+      console.error('Error updating setting:', error);
+    }
+    setSavingSettings(false);
+  };
+
+  // Calculate summary for filtered clothes transactions
   const filteredTotal = transactions.reduce((sum, t) => sum + t.subtotal, 0);
   const filteredAdvanceCollected = transactions.reduce((sum, t) => sum + t.advance, 0);
   // Use actualAmountReturned if available, otherwise fall back to advance
@@ -226,6 +290,16 @@ export default function AdminDashboard() {
   const filteredActiveAdvance = transactions
     .filter(t => t.status === 'active')
     .reduce((sum, t) => sum + t.advance, 0);
+
+  // Calculate summary for ticket transactions
+  const ticketTotal = ticketTransactions.reduce((sum, t) => sum + t.totalDue, 0);
+  const ticketMenCount = ticketTransactions.reduce((sum, t) => sum + t.menTicket, 0);
+  const ticketWomenCount = ticketTransactions.reduce((sum, t) => sum + t.womenTicket, 0);
+  const ticketChildCount = ticketTransactions.reduce((sum, t) => sum + t.childTicket, 0);
+  const ticketVipCount = ticketTransactions.filter(t => t.isComplimentary).length;
+
+  // Combined totals
+  const combinedRevenue = filteredTotal + ticketTotal;
 
   // Calculate damage analytics
   const damageAnalytics = (() => {
@@ -509,6 +583,17 @@ export default function AdminDashboard() {
           >
             Inventory
           </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('settings')}
+            className={`flex-1 py-3 text-center font-medium cursor-pointer ${
+              activeTab === 'settings'
+                ? 'text-green-600 border-b-2 border-green-600'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Settings
+          </button>
         </div>
 
         {/* Content */}
@@ -570,55 +655,128 @@ export default function AdminDashboard() {
               {activeTab === 'prices' && (
                 <div className="space-y-4">
                   <h2 className="text-lg font-semibold text-gray-800">Price Management</h2>
-                  <div className="space-y-3">
-                    {prices.map(price => (
-                      <div key={price.id} className="bg-white rounded-xl p-4 shadow-[0_2px_10px_rgba(0,0,0,0.08)] flex items-center justify-between">
-                        <div>
-                          <p className="font-medium text-gray-800">{price.itemName}</p>
-                          <p className="text-sm text-gray-500">{price.itemKey}</p>
+
+                  {/* Entry Tickets Section */}
+                  <div className="bg-blue-50 rounded-xl p-4">
+                    <h3 className="font-medium text-blue-800 mb-3 flex items-center gap-2">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
+                      </svg>
+                      Entry Tickets
+                    </h3>
+                    <div className="space-y-3">
+                      {prices.filter(p => p.itemKey.includes('ticket')).map(price => (
+                        <div key={price.id} className="bg-white rounded-xl p-4 shadow-[0_2px_10px_rgba(0,0,0,0.08)] flex items-center justify-between">
+                          <div>
+                            <p className="font-medium text-gray-800">{price.itemName}</p>
+                            <p className="text-sm text-gray-500">{price.itemKey}</p>
+                          </div>
+                          {editingPrice === price.id ? (
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                value={newPrice}
+                                onChange={(e) => setNewPrice(Number(e.target.value))}
+                                className="w-24 px-3 py-1.5 border border-gray-200 rounded-lg text-right"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => updatePrice(price.id)}
+                                className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm cursor-pointer"
+                              >
+                                Save
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingPrice(null)}
+                                className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg text-sm cursor-pointer"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-3">
+                              <span className="text-lg font-semibold text-blue-600">₹{price.price}</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingPrice(price.id);
+                                  setNewPrice(price.price);
+                                }}
+                                className="text-gray-500 hover:text-gray-700 cursor-pointer"
+                              >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                </svg>
+                              </button>
+                            </div>
+                          )}
                         </div>
-                        {editingPrice === price.id ? (
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="number"
-                              value={newPrice}
-                              onChange={(e) => setNewPrice(Number(e.target.value))}
-                              className="w-24 px-3 py-1.5 border border-gray-200 rounded-lg text-right"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => updatePrice(price.id)}
-                              className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm cursor-pointer"
-                            >
-                              Save
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setEditingPrice(null)}
-                              className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg text-sm cursor-pointer"
-                            >
-                              Cancel
-                            </button>
+                      ))}
+                      {prices.filter(p => p.itemKey.includes('ticket')).length === 0 && (
+                        <p className="text-sm text-blue-600 italic">No ticket prices configured. Run the migration to add them.</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Rentals Section */}
+                  <div className="bg-green-50 rounded-xl p-4">
+                    <h3 className="font-medium text-green-800 mb-3 flex items-center gap-2">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                      Rentals (Clothes Counter)
+                    </h3>
+                    <div className="space-y-3">
+                      {prices.filter(p => !p.itemKey.includes('ticket')).map(price => (
+                        <div key={price.id} className="bg-white rounded-xl p-4 shadow-[0_2px_10px_rgba(0,0,0,0.08)] flex items-center justify-between">
+                          <div>
+                            <p className="font-medium text-gray-800">{price.itemName}</p>
+                            <p className="text-sm text-gray-500">{price.itemKey}</p>
                           </div>
-                        ) : (
-                          <div className="flex items-center gap-3">
-                            <span className="text-lg font-semibold text-green-600">₹{price.price}</span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEditingPrice(price.id);
-                                setNewPrice(price.price);
-                              }}
-                              className="text-gray-500 hover:text-gray-700 cursor-pointer"
-                            >
-                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                              </svg>
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                          {editingPrice === price.id ? (
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                value={newPrice}
+                                onChange={(e) => setNewPrice(Number(e.target.value))}
+                                className="w-24 px-3 py-1.5 border border-gray-200 rounded-lg text-right"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => updatePrice(price.id)}
+                                className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm cursor-pointer"
+                              >
+                                Save
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingPrice(null)}
+                                className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg text-sm cursor-pointer"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-3">
+                              <span className="text-lg font-semibold text-green-600">₹{price.price}</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingPrice(price.id);
+                                  setNewPrice(price.price);
+                                }}
+                                className="text-gray-500 hover:text-gray-700 cursor-pointer"
+                              >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                </svg>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
               )}
@@ -688,37 +846,129 @@ export default function AdminDashboard() {
                     </div>
                   </div>
 
-                  {/* Summary */}
-                  <div className="bg-green-50 rounded-xl p-4">
-                    <h3 className="font-medium text-green-800 mb-3">{getDateLabel()} Summary</h3>
-                    <div className="grid grid-cols-2 gap-4 mb-4">
-                      <div className="text-center">
-                        <p className="text-2xl font-bold text-green-600">{transactions.length}</p>
-                        <p className="text-sm text-green-700">Transactions</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-2xl font-bold text-green-600">₹{filteredTotal.toFixed(2)}</p>
-                        <p className="text-sm text-green-700">Revenue</p>
-                      </div>
-                    </div>
-                    <div className="border-t border-green-200 pt-3">
-                      <h4 className="text-sm font-medium text-green-800 mb-2">Advance Tracking</h4>
-                      <div className="grid grid-cols-3 gap-2 text-center">
-                        <div className="bg-white/50 rounded-lg p-2">
-                          <p className="text-lg font-bold text-green-700">₹{filteredAdvanceCollected.toFixed(0)}</p>
-                          <p className="text-xs text-green-800">Collected</p>
-                        </div>
-                        <div className="bg-white/50 rounded-lg p-2">
-                          <p className="text-lg font-bold text-orange-600">₹{filteredAdvanceReturned.toFixed(0)}</p>
-                          <p className="text-xs text-orange-700">Returned</p>
-                        </div>
-                        <div className="bg-white/50 rounded-lg p-2">
-                          <p className="text-lg font-bold text-purple-700">₹{filteredActiveAdvance.toFixed(0)}</p>
-                          <p className="text-xs text-purple-800">Pending</p>
-                        </div>
-                      </div>
-                    </div>
+                  {/* Counter Type Filter */}
+                  <div className="flex gap-2 mb-4">
+                    <button
+                      type="button"
+                      onClick={() => setReportFilter('all')}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium cursor-pointer ${
+                        reportFilter === 'all' ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setReportFilter('tickets')}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium cursor-pointer ${
+                        reportFilter === 'tickets' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      Tickets
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setReportFilter('clothes')}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium cursor-pointer ${
+                        reportFilter === 'clothes' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      Clothes
+                    </button>
                   </div>
+
+                  {/* Combined Total */}
+                  {reportFilter === 'all' && (
+                    <div className="bg-purple-50 rounded-xl p-4 mb-4">
+                      <h3 className="font-medium text-purple-800 mb-3">{getDateLabel()} - Total Revenue</h3>
+                      <div className="text-center">
+                        <p className="text-3xl font-bold text-purple-600">₹{combinedRevenue.toFixed(2)}</p>
+                        <p className="text-sm text-purple-700 mt-1">{transactions.length + ticketTransactions.length} total transactions</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Ticket Counter Summary */}
+                  {(reportFilter === 'all' || reportFilter === 'tickets') && (
+                    <div className="bg-blue-50 rounded-xl p-4 mb-4">
+                      <h3 className="font-medium text-blue-800 mb-3 flex items-center gap-2">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
+                        </svg>
+                        Ticket Counter
+                      </h3>
+                      <div className="grid grid-cols-2 gap-4 mb-4">
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-blue-600">{ticketTransactions.length}</p>
+                          <p className="text-sm text-blue-700">Transactions</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-blue-600">₹{ticketTotal.toFixed(2)}</p>
+                          <p className="text-sm text-blue-700">Revenue</p>
+                        </div>
+                      </div>
+                      <div className="border-t border-blue-200 pt-3">
+                        <h4 className="text-sm font-medium text-blue-800 mb-2">Ticket Breakdown</h4>
+                        <div className="grid grid-cols-4 gap-2 text-center">
+                          <div className="bg-white/50 rounded-lg p-2">
+                            <p className="text-lg font-bold text-blue-700">{ticketMenCount}</p>
+                            <p className="text-xs text-blue-800">Men</p>
+                          </div>
+                          <div className="bg-white/50 rounded-lg p-2">
+                            <p className="text-lg font-bold text-blue-700">{ticketWomenCount}</p>
+                            <p className="text-xs text-blue-800">Women</p>
+                          </div>
+                          <div className="bg-white/50 rounded-lg p-2">
+                            <p className="text-lg font-bold text-blue-700">{ticketChildCount}</p>
+                            <p className="text-xs text-blue-800">Child</p>
+                          </div>
+                          <div className="bg-white/50 rounded-lg p-2">
+                            <p className="text-lg font-bold text-purple-600">{ticketVipCount}</p>
+                            <p className="text-xs text-purple-700">VIP</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Clothes Counter Summary */}
+                  {(reportFilter === 'all' || reportFilter === 'clothes') && (
+                    <div className="bg-green-50 rounded-xl p-4">
+                      <h3 className="font-medium text-green-800 mb-3 flex items-center gap-2">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                        Clothes Counter
+                      </h3>
+                      <div className="grid grid-cols-2 gap-4 mb-4">
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-green-600">{transactions.length}</p>
+                          <p className="text-sm text-green-700">Transactions</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-green-600">₹{filteredTotal.toFixed(2)}</p>
+                          <p className="text-sm text-green-700">Revenue</p>
+                        </div>
+                      </div>
+                      <div className="border-t border-green-200 pt-3">
+                        <h4 className="text-sm font-medium text-green-800 mb-2">Advance Tracking</h4>
+                        <div className="grid grid-cols-3 gap-2 text-center">
+                          <div className="bg-white/50 rounded-lg p-2">
+                            <p className="text-lg font-bold text-green-700">₹{filteredAdvanceCollected.toFixed(0)}</p>
+                            <p className="text-xs text-green-800">Collected</p>
+                          </div>
+                          <div className="bg-white/50 rounded-lg p-2">
+                            <p className="text-lg font-bold text-orange-600">₹{filteredAdvanceReturned.toFixed(0)}</p>
+                            <p className="text-xs text-orange-700">Returned</p>
+                          </div>
+                          <div className="bg-white/50 rounded-lg p-2">
+                            <p className="text-lg font-bold text-purple-700">₹{filteredActiveAdvance.toFixed(0)}</p>
+                            <p className="text-xs text-purple-800">Pending</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Damage Analytics */}
                   {(damageAnalytics.totalDamagedCount > 0 || damageAnalytics.totalLostCount > 0) && (
@@ -784,7 +1034,7 @@ export default function AdminDashboard() {
                                   <span className="text-red-600 font-medium">-₹{record.totalDeduction.toFixed(0)}</span>
                                 </div>
                                 <div className="text-gray-500">
-                                  {new Date(record.date).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}
+                                  {new Date(record.date + '+05:30').toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' })}
                                 </div>
                                 {record.notes && (
                                   <div className="text-gray-600 italic mt-1">"{record.notes}"</div>
@@ -877,7 +1127,7 @@ export default function AdminDashboard() {
                                       : transaction.totalDue.toFixed(2)}
                                   </p>
                                   <p className="text-xs text-gray-500">
-                                    {new Date(transaction.createdAt).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}
+                                    {new Date(transaction.createdAt + '+05:30').toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' })}
                                   </p>
                                 </>
                               )}
@@ -895,7 +1145,7 @@ export default function AdminDashboard() {
                           </div>
                           {transaction.status === 'advance_returned' && transaction.advanceReturnedByName && (
                             <div className="mt-2 pt-2 border-t border-gray-100 text-xs text-orange-600">
-                              Returned by {transaction.advanceReturnedByName} on {new Date(transaction.advanceReturnedAt!).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}
+                              Returned by {transaction.advanceReturnedByName} on {new Date(transaction.advanceReturnedAt! + '+05:30').toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' })}
                               {!transaction.isComplimentary && transaction.totalDeduction && transaction.totalDeduction > 0 && (
                                 <span className="ml-2 text-red-600 font-medium">
                                   (Deduction: ₹{transaction.totalDeduction.toFixed(0)})
@@ -1120,6 +1370,110 @@ export default function AdminDashboard() {
                           <strong>Returned:</strong> Items returned (good + damaged condition)<br />
                           <strong>Lost:</strong> Items not returned by customers<br />
                           <strong>Still Out:</strong> Items currently with customers (active rentals)
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Settings Tab */}
+              {activeTab === 'settings' && (
+                <div className="space-y-4">
+                  <h2 className="text-lg font-semibold text-gray-800">Business Settings</h2>
+
+                  {/* UPI Settings Card */}
+                  <div className="bg-white rounded-xl p-5 shadow-[0_2px_10px_rgba(0,0,0,0.08)]">
+                    <h3 className="font-medium text-gray-800 mb-4 flex items-center gap-2">
+                      <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                      </svg>
+                      UPI Payment Settings
+                    </h3>
+                    <p className="text-sm text-gray-500 mb-4">
+                      Configure your UPI details for generating payment QR codes at checkout.
+                    </p>
+
+                    <div className="space-y-4">
+                      {/* UPI ID */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          UPI ID (VPA)
+                        </label>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={settings.upi_id || ''}
+                            onChange={(e) => setSettings(prev => ({ ...prev, upi_id: e.target.value }))}
+                            placeholder="yourshop@upi"
+                            className="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => updateSetting('upi_id', settings.upi_id || '')}
+                            disabled={savingSettings}
+                            className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 disabled:bg-gray-400 cursor-pointer"
+                          >
+                            {savingSettings ? 'Saving...' : 'Save'}
+                          </button>
+                        </div>
+                        <p className="text-xs text-gray-400 mt-1">
+                          Example: subhashgarden@paytm, subhashgarden@ybl
+                        </p>
+                      </div>
+
+                      {/* Business Name */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Business Name (for QR display)
+                        </label>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={settings.business_name || ''}
+                            onChange={(e) => setSettings(prev => ({ ...prev, business_name: e.target.value }))}
+                            placeholder="Subhash Garden"
+                            className="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => updateSetting('business_name', settings.business_name || '')}
+                            disabled={savingSettings}
+                            className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 disabled:bg-gray-400 cursor-pointer"
+                          >
+                            {savingSettings ? 'Saving...' : 'Save'}
+                          </button>
+                        </div>
+                        <p className="text-xs text-gray-400 mt-1">
+                          This name will appear when customers scan the QR code
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Preview Card */}
+                  {settings.upi_id && (
+                    <div className="bg-green-50 rounded-xl p-4 border border-green-200">
+                      <h4 className="font-medium text-green-800 mb-2">UPI Link Preview</h4>
+                      <code className="text-xs text-green-700 break-all">
+                        upi://pay?pa={settings.upi_id}&pn={encodeURIComponent(settings.business_name || 'Subhash Garden')}&am=100&cu=INR
+                      </code>
+                      <p className="text-xs text-green-600 mt-2">
+                        This is how the UPI link will be generated (amount will be dynamic)
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Info Note */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                    <div className="flex items-start gap-3">
+                      <svg className="w-5 h-5 text-blue-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <div>
+                        <p className="font-medium text-blue-800">How UPI QR works</p>
+                        <p className="text-sm text-blue-700 mt-1">
+                          When a cashier clicks "Pay" at checkout, a QR code will be shown that customers can scan with any UPI app (GPay, PhonePe, Paytm, etc.). The payment amount will be pre-filled.
                         </p>
                       </div>
                     </div>

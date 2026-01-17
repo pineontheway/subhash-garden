@@ -341,7 +341,7 @@ export default function ReturnAdvance() {
                   </div>
                   <div className="flex justify-between items-center text-xs text-gray-500 pt-2 border-t border-gray-100">
                     <span>Receipt: HC-{transaction.id.slice(-8).toUpperCase()}</span>
-                    <span>{new Date(transaction.createdAt).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}</span>
+                    <span>{new Date(transaction.createdAt + '+05:30').toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' })}</span>
                   </div>
                 </div>
               ))}

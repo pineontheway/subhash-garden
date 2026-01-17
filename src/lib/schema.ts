@@ -23,7 +23,33 @@ export const prices = sqliteTable('prices', {
   updatedBy: text('updated_by').references(() => users.id),
 });
 
-// Transactions table - sales records
+// Settings table - configurable business settings
+export const settings = sqliteTable('settings', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+  updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedBy: text('updated_by').references(() => users.id),
+});
+
+// Ticket Transactions table - entry ticket sales
+export const ticketTransactions = sqliteTable('ticket_transactions', {
+  id: text('id').primaryKey(),
+  customerName: text('customer_name').notNull(),
+  customerPhone: text('customer_phone').notNull(),
+  vehicleNumber: text('vehicle_number'), // Optional - car/bike number
+  menTicket: integer('men_ticket').default(0).notNull(),
+  womenTicket: integer('women_ticket').default(0).notNull(),
+  childTicket: integer('child_ticket').default(0).notNull(),
+  subtotal: real('subtotal').notNull(),
+  totalDue: real('total_due').notNull(), // Same as subtotal (no advance)
+  paymentMethod: text('payment_method', { enum: ['upi', 'cash'] }).notNull(),
+  cashierId: text('cashier_id').references(() => users.id).notNull(),
+  cashierName: text('cashier_name').notNull(),
+  createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
+  isComplimentary: integer('is_complimentary', { mode: 'boolean' }).default(false).notNull(),
+});
+
+// Transactions table - rental sales records (clothes counter)
 export const transactions = sqliteTable('transactions', {
   id: text('id').primaryKey(),
   customerName: text('customer_name').notNull(),
@@ -59,6 +85,10 @@ export type Price = typeof prices.$inferSelect;
 export type NewPrice = typeof prices.$inferInsert;
 export type Transaction = typeof transactions.$inferSelect;
 export type NewTransaction = typeof transactions.$inferInsert;
+export type Setting = typeof settings.$inferSelect;
+export type NewSetting = typeof settings.$inferInsert;
+export type TicketTransaction = typeof ticketTransactions.$inferSelect;
+export type NewTicketTransaction = typeof ticketTransactions.$inferInsert;
 
 // Item return tracking types
 export type ItemType = 'maleCostume' | 'femaleCostume' | 'kidsCostume' | 'tube' | 'locker';

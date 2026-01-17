@@ -16,18 +16,17 @@ type ReceiptData = {
   timestamp: string;
   customerName: string;
   customerPhone: string;
+  vehicleNumber?: string;
   cashierName: string;
   lineItems: { label: string; qty: number; price: number }[];
-  subtotal: number;
-  advance: number;
-  totalDue: number;
+  total: number;
+  paymentMethod: 'upi' | 'cash';
   isVIP?: boolean;
 };
 
-export default function Checkout() {
+export default function TicketCheckout() {
   const router = useRouter();
-  const { data: session } = useSession();
-  const [advance, setAdvance] = useState(0);
+  const { data: session, status } = useSession();
   const [prices, setPrices] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -39,13 +38,32 @@ export default function Checkout() {
   const [items, setItems] = useState({
     name: '',
     phone: '',
-    maleCostume: 0,
-    femaleCostume: 0,
-    kidsCostume: 0,
-    tube: 0,
-    locker: 0,
+    vehicleNumber: '',
+    menTicket: 0,
+    womenTicket: 0,
+    childTicket: 0,
   });
   const [isVIP, setIsVIP] = useState(false);
+
+  // Check user role and counter selection
+  useEffect(() => {
+    if (status === 'authenticated' && session?.user) {
+      if (!session.user.role) {
+        router.push('/access-denied');
+        return;
+      }
+      if (session.user.role === 'cashier') {
+        const counterType = sessionStorage.getItem('counterType');
+        if (!counterType) {
+          router.push('/select-counter');
+        } else if (counterType !== 'ticket') {
+          router.push('/');
+        }
+      }
+    } else if (status === 'unauthenticated') {
+      router.push('/');
+    }
+  }, [status, session, router]);
 
   // Fetch prices from API
   useEffect(() => {
@@ -87,73 +105,47 @@ export default function Checkout() {
   // Parse items from URL
   useEffect(() => {
     if (router.isReady && Object.keys(prices).length > 0) {
-      const { name, phone, male, female, kids, tube, locker } = router.query;
+      const { name, phone, vehicle, men, women, child } = router.query;
       const parsedItems = {
         name: (name as string) || '',
         phone: (phone as string) || '',
-        maleCostume: parseInt(male as string) || 0,
-        femaleCostume: parseInt(female as string) || 0,
-        kidsCostume: parseInt(kids as string) || 0,
-        tube: parseInt(tube as string) || 0,
-        locker: parseInt(locker as string) || 0,
+        vehicleNumber: (vehicle as string) || '',
+        menTicket: parseInt(men as string) || 0,
+        womenTicket: parseInt(women as string) || 0,
+        childTicket: parseInt(child as string) || 0,
       };
       setItems(parsedItems);
-
-      // Calculate subtotal and set as default advance
-      const subtotal =
-        parsedItems.maleCostume * (prices.male_costume || 0) +
-        parsedItems.femaleCostume * (prices.female_costume || 0) +
-        parsedItems.kidsCostume * (prices.kids_costume || 0) +
-        parsedItems.tube * (prices.tube || 0) +
-        parsedItems.locker * (prices.locker || 0);
-      setAdvance(subtotal);
     }
   }, [router.isReady, router.query, prices]);
 
   const subtotal =
-    items.maleCostume * (prices.male_costume || 0) +
-    items.femaleCostume * (prices.female_costume || 0) +
-    items.kidsCostume * (prices.kids_costume || 0) +
-    items.tube * (prices.tube || 0) +
-    items.locker * (prices.locker || 0);
+    items.menTicket * (prices.men_ticket || 0) +
+    items.womenTicket * (prices.women_ticket || 0) +
+    items.childTicket * (prices.child_ticket || 0);
 
-  const totalDue = subtotal + advance;
+  const totalDue = isVIP ? 0 : subtotal;
 
   // Build line items array for display
   const lineItems: { label: string; qty: number; price: number }[] = [];
-  if (items.maleCostume > 0) {
+  if (items.menTicket > 0) {
     lineItems.push({
-      label: 'Male Costume',
-      qty: items.maleCostume,
-      price: items.maleCostume * (prices.male_costume || 0),
+      label: 'Men Ticket',
+      qty: items.menTicket,
+      price: items.menTicket * (prices.men_ticket || 0),
     });
   }
-  if (items.femaleCostume > 0) {
+  if (items.womenTicket > 0) {
     lineItems.push({
-      label: 'Female Costume',
-      qty: items.femaleCostume,
-      price: items.femaleCostume * (prices.female_costume || 0),
+      label: 'Women Ticket',
+      qty: items.womenTicket,
+      price: items.womenTicket * (prices.women_ticket || 0),
     });
   }
-  if (items.kidsCostume > 0) {
+  if (items.childTicket > 0) {
     lineItems.push({
-      label: 'Kids Costume',
-      qty: items.kidsCostume,
-      price: items.kidsCostume * (prices.kids_costume || 0),
-    });
-  }
-  if (items.tube > 0) {
-    lineItems.push({
-      label: 'Tube',
-      qty: items.tube,
-      price: items.tube * (prices.tube || 0),
-    });
-  }
-  if (items.locker > 0) {
-    lineItems.push({
-      label: 'Locker',
-      qty: items.locker,
-      price: items.locker * (prices.locker || 0),
+      label: 'Child Ticket',
+      qty: items.childTicket,
+      price: items.childTicket * (prices.child_ticket || 0),
     });
   }
 
@@ -162,49 +154,56 @@ export default function Checkout() {
     const pa = upiSettings.upi_id || '';
     const pn = encodeURIComponent(upiSettings.business_name || 'Subhash Garden');
     const am = amount.toFixed(2);
-    const tn = encodeURIComponent(`Payment for rental - ${items.name}`);
+    const tn = encodeURIComponent(`Entry Ticket - ${items.name}`);
     return `upi://pay?pa=${pa}&pn=${pn}&am=${am}&cu=INR&tn=${tn}`;
   };
 
-  const handlePay = async () => {
+  const handlePayUPI = () => {
     if (!session?.user) {
       alert('Please login to complete the transaction');
       return;
     }
 
-    const finalAmount = isVIP ? advance : totalDue;
+    if (isVIP) {
+      // VIP - complete directly
+      saveTransaction('cash');
+      return;
+    }
 
-    // Show QR modal if UPI is configured and there's an amount to pay
-    if (upiSettings.upi_id && finalAmount > 0) {
+    // Show QR modal if UPI is configured
+    if (upiSettings.upi_id && totalDue > 0) {
       setShowQRModal(true);
       return;
     }
 
-    // Otherwise proceed directly (VIP with 0 advance or no UPI configured)
-    await saveTransaction();
+    // No UPI configured, save as cash
+    saveTransaction('cash');
   };
 
-  const saveTransaction = async () => {
+  const handlePayCash = async () => {
+    if (!session?.user) {
+      alert('Please login to complete the transaction');
+      return;
+    }
+    await saveTransaction('cash');
+  };
+
+  const saveTransaction = async (paymentMethod: 'upi' | 'cash') => {
     setSaving(true);
     try {
-      // VIP: subtotal calculated normally, advance is optional (can be 0)
-      // VIP totalDue = just the advance (they don't pay for items)
-      const finalTotalDue = isVIP ? advance : totalDue;
-
-      const res = await fetch('/api/transactions', {
+      const res = await fetch('/api/ticket-transactions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           customerName: items.name,
           customerPhone: items.phone,
-          maleCostume: items.maleCostume,
-          femaleCostume: items.femaleCostume,
-          kidsCostume: items.kidsCostume,
-          tube: items.tube,
-          locker: items.locker,
+          vehicleNumber: items.vehicleNumber || null,
+          menTicket: items.menTicket,
+          womenTicket: items.womenTicket,
+          childTicket: items.childTicket,
           subtotal,
-          advance,
-          totalDue: finalTotalDue,
+          totalDue,
+          paymentMethod,
           isComplimentary: isVIP,
         }),
       });
@@ -221,11 +220,11 @@ export default function Checkout() {
           }),
           customerName: items.name,
           customerPhone: items.phone,
+          vehicleNumber: items.vehicleNumber,
           cashierName: session?.user?.name || 'Unknown',
           lineItems,
-          subtotal,
-          advance,
-          totalDue: finalTotalDue,
+          total: totalDue,
+          paymentMethod,
           isVIP,
         });
         setShowQRModal(false);
@@ -247,7 +246,21 @@ export default function Checkout() {
 
   const handleDone = () => {
     setShowReceipt(false);
-    router.push('/');
+    router.push('/ticket-counter');
+  };
+
+  const handleBack = () => {
+    const params = new URLSearchParams({
+      name: items.name,
+      phone: items.phone,
+      men: items.menTicket.toString(),
+      women: items.womenTicket.toString(),
+      child: items.childTicket.toString(),
+    });
+    if (items.vehicleNumber) {
+      params.set('vehicle', items.vehicleNumber);
+    }
+    router.push(`/ticket-counter?${params.toString()}`);
   };
 
   if (loading) {
@@ -265,7 +278,7 @@ export default function Checkout() {
         <header className="flex items-center gap-3 px-5 py-4 border-b border-gray-100 print:hidden">
           <button
             type="button"
-            onClick={() => router.push(`/?name=${encodeURIComponent(items.name)}&phone=${encodeURIComponent(items.phone)}&male=${items.maleCostume}&female=${items.femaleCostume}&kids=${items.kidsCostume}&tube=${items.tube}&locker=${items.locker}`)}
+            onClick={handleBack}
             className="flex items-center gap-2 text-gray-600 hover:text-gray-800 cursor-pointer"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -281,16 +294,16 @@ export default function Checkout() {
         <main className="p-5 pb-32 print:hidden">
           {/* Success Icon */}
           <div className="flex justify-center mb-4">
-            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
-              <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center">
+              <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
               </svg>
             </div>
           </div>
 
           {/* Title */}
-          <h1 className="text-2xl font-bold text-center text-gray-800 mb-1">Checkout</h1>
-          <p className="text-gray-500 text-center mb-2">Please review your charges</p>
+          <h1 className="text-2xl font-bold text-center text-gray-800 mb-1">Ticket Checkout</h1>
+          <p className="text-gray-500 text-center mb-2">Please review the ticket details</p>
           {session?.user?.name && (
             <p className="text-gray-700 text-center text-lg mb-6">
               Cashier: <span className="font-bold text-gray-900">{session.user.name}</span>
@@ -303,10 +316,16 @@ export default function Checkout() {
               <span className="text-gray-600">Customer Name</span>
               <span className="text-gray-900 font-medium">{items.name}</span>
             </div>
-            <div className="flex items-center justify-between py-2">
+            <div className="flex items-center justify-between py-2 border-b border-gray-100">
               <span className="text-gray-600">Phone Number</span>
               <span className="text-gray-900 font-medium">+91 {items.phone}</span>
             </div>
+            {items.vehicleNumber && (
+              <div className="flex items-center justify-between py-2">
+                <span className="text-gray-600">Vehicle Number</span>
+                <span className="text-gray-900 font-medium">{items.vehicleNumber}</span>
+              </div>
+            )}
           </div>
 
           {/* VIP Toggle */}
@@ -314,18 +333,11 @@ export default function Checkout() {
             <div className="flex items-center justify-between">
               <div>
                 <span className="text-purple-800 font-medium">VIP / Complimentary</span>
-                <p className="text-purple-600 text-xs mt-0.5">No charge for items, advance optional</p>
+                <p className="text-purple-600 text-xs mt-0.5">Free entry for special guests</p>
               </div>
               <button
                 type="button"
-                onClick={() => {
-                  if (!isVIP) {
-                    setAdvance(0); // Reset advance to 0 when enabling VIP
-                  } else {
-                    setAdvance(subtotal); // Restore advance to subtotal when disabling VIP
-                  }
-                  setIsVIP(!isVIP);
-                }}
+                onClick={() => setIsVIP(!isVIP)}
                 className={`relative w-14 h-8 rounded-full transition-colors cursor-pointer ${
                   isVIP ? 'bg-purple-600' : 'bg-gray-300'
                 }`}
@@ -344,76 +356,70 @@ export default function Checkout() {
             {lineItems.map((item, index) => (
               <div key={index} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-b-0">
                 <span className="text-gray-700">{item.label} x{item.qty}</span>
-                <span className="text-gray-800 font-medium">₹{item.price.toFixed(2)}</span>
+                <span className={`font-medium ${isVIP ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
+                  ₹{item.price.toFixed(2)}
+                </span>
               </div>
             ))}
           </div>
 
-          {/* Subtotal */}
-          <div className="bg-white rounded-2xl p-4 shadow-[0_4px_20px_rgba(0,0,0,0.08)] mb-4">
+          {/* Total Card */}
+          <div className={`rounded-2xl p-4 shadow-[0_4px_20px_rgba(0,0,0,0.08)] ${isVIP ? 'bg-purple-50' : 'bg-blue-50'}`}>
             <div className="flex items-center justify-between">
-              <span className="text-gray-800 font-medium">Subtotal</span>
-              <span className="text-gray-800 font-semibold">₹{subtotal.toFixed(2)}</span>
-            </div>
-          </div>
-
-          {/* Advance Card */}
-          <div className={`rounded-2xl p-4 shadow-[0_4px_20px_rgba(0,0,0,0.08)] ${isVIP ? 'bg-purple-50' : 'bg-white'}`}>
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <span className={`font-medium ${isVIP ? 'text-purple-800' : 'text-gray-800'}`}>
-                  {isVIP ? 'Advance (Optional)' : 'Advance'}
-                </span>
-                {isVIP && <p className="text-xs text-purple-600">Refundable deposit</p>}
-              </div>
-              <div className="flex items-center">
-                <button
-                  type="button"
-                  onClick={() => setAdvance(Math.max(0, advance - 50))}
-                  className="w-10 h-8 bg-gray-200 text-gray-600 rounded-l flex items-center justify-center cursor-pointer hover:bg-gray-300"
-                >
-                  −
-                </button>
-                <div className={`h-8 px-3 flex items-center justify-center font-medium min-w-[80px] ${isVIP ? 'bg-purple-100 text-purple-800' : 'bg-gray-100 text-gray-800'}`}>
-                  {advance.toFixed(2)}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setAdvance(advance + 50)}
-                  className={`w-10 h-8 text-white rounded-r flex items-center justify-center cursor-pointer ${isVIP ? 'bg-purple-600 hover:bg-purple-700' : 'bg-green-600 hover:bg-green-700'}`}
-                >
-                  +
-                </button>
-              </div>
-            </div>
-            <div className={`flex items-center justify-between pt-3 border-t ${isVIP ? 'border-purple-200' : 'border-gray-100'}`}>
-              <span className={isVIP ? 'text-purple-700' : 'text-gray-500'}>
-                {isVIP ? 'Amount to Collect' : 'Total Amount'}
+              <span className={`text-lg font-medium ${isVIP ? 'text-purple-800' : 'text-blue-800'}`}>
+                Total Amount
               </span>
-              <span className={`font-semibold text-lg ${isVIP ? 'text-purple-600' : 'text-green-600'}`}>
-                ₹{isVIP ? advance.toFixed(2) : totalDue.toFixed(2)}
-                {isVIP && advance === 0 && <span className="text-sm ml-1">(VIP)</span>}
+              <span className={`text-2xl font-bold ${isVIP ? 'text-purple-600' : 'text-blue-600'}`}>
+                {isVIP ? (
+                  <>
+                    <span className="line-through text-gray-400 text-lg mr-2">₹{subtotal.toFixed(2)}</span>
+                    <span>FREE</span>
+                  </>
+                ) : (
+                  `₹${totalDue.toFixed(2)}`
+                )}
               </span>
             </div>
           </div>
         </main>
 
-        {/* Pay Button */}
+        {/* Payment Buttons */}
         <div className="fixed bottom-0 left-0 right-0 p-5 bg-white border-t border-gray-100 max-w-md mx-auto print:hidden">
-          <button
-            type="button"
-            onClick={handlePay}
-            disabled={saving}
-            className={`w-full py-4 text-white text-lg font-semibold rounded-xl cursor-pointer disabled:bg-gray-400 disabled:cursor-not-allowed ${
-              isVIP
-                ? 'bg-purple-600 hover:bg-purple-700 active:bg-purple-800'
-                : 'bg-green-700 hover:bg-green-800 active:bg-green-900'
-            }`}
-          >
-            {saving ? 'Processing...' : isVIP
-              ? (advance > 0 ? `Collect ₹${advance.toFixed(2)} (VIP)` : 'Complete (VIP)')
-              : `Pay ₹${totalDue.toFixed(2)}`}
-          </button>
+          {isVIP ? (
+            <button
+              type="button"
+              onClick={() => saveTransaction('cash')}
+              disabled={saving}
+              className="w-full py-4 bg-purple-600 text-white text-lg font-semibold rounded-xl cursor-pointer hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+            >
+              {saving ? 'Processing...' : 'Complete (VIP Entry)'}
+            </button>
+          ) : (
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={handlePayUPI}
+                disabled={saving}
+                className="flex-1 py-4 bg-blue-700 text-white text-lg font-semibold rounded-xl cursor-pointer hover:bg-blue-800 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                </svg>
+                UPI
+              </button>
+              <button
+                type="button"
+                onClick={handlePayCash}
+                disabled={saving}
+                className="flex-1 py-4 bg-green-700 text-white text-lg font-semibold rounded-xl cursor-pointer hover:bg-green-800 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+                Cash
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -422,13 +428,13 @@ export default function Checkout() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-sm w-full overflow-hidden">
             {/* Modal Header */}
-            <div className={`p-5 text-center ${isVIP ? 'bg-purple-50' : 'bg-green-50'}`}>
-              <div className={`w-12 h-12 mx-auto rounded-full flex items-center justify-center mb-3 ${isVIP ? 'bg-purple-100' : 'bg-green-100'}`}>
-                <svg className={`w-6 h-6 ${isVIP ? 'text-purple-600' : 'text-green-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="bg-blue-50 p-5 text-center">
+              <div className="w-12 h-12 mx-auto bg-blue-100 rounded-full flex items-center justify-center mb-3">
+                <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
                 </svg>
               </div>
-              <h2 className={`text-xl font-bold ${isVIP ? 'text-purple-800' : 'text-green-800'}`}>Scan to Pay</h2>
+              <h2 className="text-xl font-bold text-blue-800">Scan to Pay</h2>
               <p className="text-gray-600 text-sm mt-1">Ask customer to scan with any UPI app</p>
             </div>
 
@@ -436,7 +442,7 @@ export default function Checkout() {
             <div className="p-6">
               <div className="bg-white border-2 border-gray-100 rounded-xl p-4 flex justify-center">
                 <QRCodeSVG
-                  value={generateUpiUri(isVIP ? advance : totalDue)}
+                  value={generateUpiUri(totalDue)}
                   size={200}
                   level="H"
                   includeMargin={true}
@@ -444,11 +450,9 @@ export default function Checkout() {
               </div>
 
               {/* Amount Display */}
-              <div className={`mt-4 p-4 rounded-xl text-center ${isVIP ? 'bg-purple-50' : 'bg-green-50'}`}>
+              <div className="mt-4 p-4 bg-blue-50 rounded-xl text-center">
                 <p className="text-gray-600 text-sm">Amount to Pay</p>
-                <p className={`text-3xl font-bold ${isVIP ? 'text-purple-600' : 'text-green-600'}`}>
-                  ₹{(isVIP ? advance : totalDue).toFixed(2)}
-                </p>
+                <p className="text-3xl font-bold text-blue-600">₹{totalDue.toFixed(2)}</p>
               </div>
 
               {/* UPI ID Display */}
@@ -471,13 +475,9 @@ export default function Checkout() {
               </button>
               <button
                 type="button"
-                onClick={saveTransaction}
+                onClick={() => saveTransaction('upi')}
                 disabled={saving}
-                className={`flex-1 py-3 text-white font-semibold rounded-xl cursor-pointer disabled:bg-gray-400 ${
-                  isVIP
-                    ? 'bg-purple-600 hover:bg-purple-700'
-                    : 'bg-green-600 hover:bg-green-700'
-                }`}
+                className="flex-1 py-3 bg-blue-600 text-white font-semibold rounded-xl cursor-pointer disabled:bg-gray-400 hover:bg-blue-700"
               >
                 {saving ? 'Processing...' : 'Payment Received'}
               </button>
@@ -497,8 +497,9 @@ export default function Checkout() {
             <div className="p-6 font-mono text-sm">
               {/* Header */}
               <div className="text-center mb-4">
-                <div className="text-2xl mb-1">🏊</div>
+                <div className="text-2xl mb-1">🎫</div>
                 <h2 className="text-xl font-bold text-gray-800">Subhash Garden</h2>
+                <p className="text-gray-500 text-xs">Entry Ticket</p>
                 <div className="w-full border-b-2 border-dashed border-gray-300 my-3"></div>
               </div>
 
@@ -510,7 +511,7 @@ export default function Checkout() {
                 </div>
                 <div className="flex justify-between">
                   <span>Receipt #:</span>
-                  <span>HC-{receiptData.id}</span>
+                  <span>TKT-{receiptData.id}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Cashier:</span>
@@ -530,6 +531,12 @@ export default function Checkout() {
                   <span>Phone:</span>
                   <span>+91 {receiptData.customerPhone}</span>
                 </div>
+                {receiptData.vehicleNumber && (
+                  <div className="flex justify-between">
+                    <span>Vehicle:</span>
+                    <span>{receiptData.vehicleNumber}</span>
+                  </div>
+                )}
               </div>
 
               <div className="w-full border-b-2 border-dashed border-gray-300 my-3"></div>
@@ -546,39 +553,33 @@ export default function Checkout() {
 
               <div className="w-full border-b-2 border-dashed border-gray-300 my-3"></div>
 
-              {/* Totals */}
-              <div className="space-y-2">
-                <div className="flex justify-between text-gray-600">
-                  <span>Subtotal</span>
-                  <span>₹{receiptData.subtotal.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-gray-600">
-                  <span>Advance Paid</span>
-                  <span>₹{receiptData.advance.toFixed(2)}</span>
-                </div>
-                <div className="w-full border-b border-gray-300 my-2"></div>
-                <div className="flex justify-between text-lg font-bold text-gray-800">
-                  <span>TOTAL AMOUNT</span>
-                  <span>₹{receiptData.totalDue.toFixed(2)}</span>
-                </div>
+              {/* Total */}
+              <div className="flex justify-between text-lg font-bold text-gray-800">
+                <span>TOTAL PAID</span>
+                <span>{receiptData.isVIP ? 'FREE (VIP)' : `₹${receiptData.total.toFixed(2)}`}</span>
               </div>
 
               <div className="w-full border-b-2 border-dashed border-gray-300 my-4"></div>
 
               {/* Payment Status */}
-              <div className={`text-center py-3 rounded-lg mb-4 ${receiptData.isVIP ? 'bg-purple-50' : 'bg-green-50'}`}>
-                <div className={`flex items-center justify-center gap-2 font-semibold ${receiptData.isVIP ? 'text-purple-700' : 'text-green-700'}`}>
+              <div className={`text-center py-3 rounded-lg mb-4 ${receiptData.isVIP ? 'bg-purple-50' : 'bg-blue-50'}`}>
+                <div className={`flex items-center justify-center gap-2 font-semibold ${receiptData.isVIP ? 'text-purple-700' : 'text-blue-700'}`}>
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                   {receiptData.isVIP ? 'VIP - COMPLIMENTARY' : 'PAYMENT RECEIVED'}
                 </div>
+                {!receiptData.isVIP && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Paid via {receiptData.paymentMethod.toUpperCase()}
+                  </p>
+                )}
               </div>
 
               {/* Footer */}
               <div className="text-center text-gray-500 text-xs">
                 <p>Thank you for visiting!</p>
-                <p className="mt-1">Have a great swim!</p>
+                <p className="mt-1">Have a great time!</p>
               </div>
             </div>
 
@@ -597,7 +598,7 @@ export default function Checkout() {
               <button
                 type="button"
                 onClick={handleDone}
-                className="flex-1 py-3 bg-green-700 text-white font-semibold rounded-xl hover:bg-green-800 cursor-pointer"
+                className="flex-1 py-3 bg-blue-700 text-white font-semibold rounded-xl hover:bg-blue-800 cursor-pointer"
               >
                 Done
               </button>
