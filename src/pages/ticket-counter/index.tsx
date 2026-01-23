@@ -12,8 +12,10 @@ export default function TicketCounter() {
   const [menTicket, setMenTicket] = useState(0);
   const [womenTicket, setWomenTicket] = useState(0);
   const [childTicket, setChildTicket] = useState(0);
+  const [nextTagNumber, setNextTagNumber] = useState<string | null>(null);
+  const [startingTagNumber, setStartingTagNumber] = useState<string | null>(null);
 
-  // Check user role and counter selection
+  // Check user role, counter selection, and session setup
   useEffect(() => {
     if (status === 'authenticated' && session?.user) {
       if (!session.user.role) {
@@ -25,10 +27,22 @@ export default function TicketCounter() {
         const counterType = sessionStorage.getItem('counterType');
         if (!counterType) {
           router.push('/select-counter');
+          return;
         } else if (counterType !== 'ticket') {
           router.push('/');
+          return;
         }
       }
+      // Check if session is started for today
+      const savedDate = sessionStorage.getItem('ticketSessionDate');
+      const todayDate = new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' });
+      const savedNextTag = sessionStorage.getItem('nextTagNumber');
+      if (savedDate !== todayDate || !savedNextTag) {
+        router.push('/ticket-counter/start-session');
+        return;
+      }
+      setNextTagNumber(savedNextTag);
+      setStartingTagNumber(sessionStorage.getItem('startingTagNumber'));
     } else if (status === 'unauthenticated') {
       router.push('/');
     }
@@ -47,8 +61,17 @@ export default function TicketCounter() {
     }
   }, [router.isReady, router.query]);
 
+  // Refresh next tag number from sessionStorage
+  useEffect(() => {
+    const handleStorageChange = () => {
+      setNextTagNumber(sessionStorage.getItem('nextTagNumber'));
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
   // Show loading while checking auth
-  if (status === 'loading') {
+  if (status === 'loading' || nextTagNumber === null) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-gray-500">Loading...</div>
@@ -63,6 +86,20 @@ export default function TicketCounter() {
     return indianMobileRegex.test(cleaned);
   };
 
+  // Generate tag numbers for this transaction
+  const generateTagNumbers = (count: number): string[] => {
+    const tags: string[] = [];
+    let currentTag = parseInt(nextTagNumber || '0', 10);
+    for (let i = 0; i < count; i++) {
+      tags.push(currentTag.toString().padStart(6, '0'));
+      currentTag++;
+    }
+    return tags;
+  };
+
+  const totalTickets = menTicket + womenTicket + childTicket;
+  const assignedTags = totalTickets > 0 ? generateTagNumbers(totalTickets) : [];
+
   const handleCheckout = () => {
     if (!name.trim()) {
       alert('Please enter customer name');
@@ -76,8 +113,7 @@ export default function TicketCounter() {
       alert('Please enter a valid 10-digit Indian mobile number');
       return;
     }
-    const total = menTicket + womenTicket + childTicket;
-    if (total === 0) {
+    if (totalTickets === 0) {
       alert('Please select at least one ticket');
       return;
     }
@@ -87,6 +123,7 @@ export default function TicketCounter() {
       men: menTicket.toString(),
       women: womenTicket.toString(),
       child: childTicket.toString(),
+      tags: assignedTags.join(','),
     });
     if (vehicleNumber.trim()) {
       params.set('vehicle', vehicleNumber.trim());
@@ -96,7 +133,15 @@ export default function TicketCounter() {
 
   const handleLogout = () => {
     sessionStorage.removeItem('counterType');
+    sessionStorage.removeItem('ticketSessionDate');
+    sessionStorage.removeItem('nextTagNumber');
+    sessionStorage.removeItem('startingTagNumber');
+    sessionStorage.removeItem('totalTagsReceived');
     signOut();
+  };
+
+  const handleEndSession = () => {
+    router.push('/ticket-counter/end-session');
   };
 
   // Counter button styles
@@ -173,6 +218,24 @@ export default function TicketCounter() {
 
         {/* Content */}
         <main className="p-5 space-y-4 pb-32">
+          {/* Session Info Card */}
+          <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-2xl p-4 text-white">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-blue-100 text-sm">Next Tag Number</p>
+                <p className="text-2xl font-bold font-mono tracking-wider">{nextTagNumber}</p>
+                <p className="text-blue-200 text-xs mt-1">Started from: {startingTagNumber}</p>
+              </div>
+              <button
+                type="button"
+                onClick={handleEndSession}
+                className="text-xs bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg transition-colors"
+              >
+                End Session
+              </button>
+            </div>
+          </div>
+
           {/* Name Input */}
           <div>
             <label className="block text-gray-700 mb-2">Customer Name</label>
@@ -252,6 +315,25 @@ export default function TicketCounter() {
               </div>
             </div>
           </div>
+
+          {/* Auto-assigned Tags Preview */}
+          {totalTickets > 0 && (
+            <div className="bg-blue-50 rounded-2xl p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                </svg>
+                <span className="text-blue-800 font-medium">Tags to be assigned</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {assignedTags.map((tag, index) => (
+                  <span key={index} className="bg-white text-blue-700 px-3 py-1.5 rounded-lg text-sm font-mono font-medium shadow-sm">
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </main>
 
         {/* Checkout Button */}

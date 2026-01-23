@@ -17,7 +17,14 @@ export default function SelectCounter() {
       // If counter type already selected, redirect to appropriate page
       const counterType = sessionStorage.getItem('counterType');
       if (counterType === 'ticket') {
-        router.push('/ticket-counter');
+        // Check if session is started for today
+        const savedDate = sessionStorage.getItem('ticketSessionDate');
+        const todayDate = new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' });
+        if (savedDate === todayDate && sessionStorage.getItem('nextTagNumber')) {
+          router.push('/ticket-counter');
+        } else {
+          router.push('/ticket-counter/start-session');
+        }
       } else if (counterType === 'clothes') {
         router.push('/');
       }
@@ -38,7 +45,14 @@ export default function SelectCounter() {
   const handleSelectCounter = (counterType: 'ticket' | 'clothes') => {
     sessionStorage.setItem('counterType', counterType);
     if (counterType === 'ticket') {
-      router.push('/ticket-counter');
+      // Check if session is already started for today
+      const savedDate = sessionStorage.getItem('ticketSessionDate');
+      const todayDate = new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' });
+      if (savedDate === todayDate && sessionStorage.getItem('nextTagNumber')) {
+        router.push('/ticket-counter');
+      } else {
+        router.push('/ticket-counter/start-session');
+      }
     } else {
       router.push('/');
     }

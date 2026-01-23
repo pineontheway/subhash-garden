@@ -40,6 +40,7 @@ export const ticketTransactions = sqliteTable('ticket_transactions', {
   menTicket: integer('men_ticket').default(0).notNull(),
   womenTicket: integer('women_ticket').default(0).notNull(),
   childTicket: integer('child_ticket').default(0).notNull(),
+  tagNumbers: text('tag_numbers'), // Comma-separated 6-digit tag numbers (one per person)
   subtotal: real('subtotal').notNull(),
   totalDue: real('total_due').notNull(), // Same as subtotal (no advance)
   paymentMethod: text('payment_method', { enum: ['upi', 'cash'] }).notNull(),

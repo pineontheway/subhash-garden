@@ -17,6 +17,7 @@ type ReceiptData = {
   customerName: string;
   customerPhone: string;
   vehicleNumber?: string;
+  tagNumbers?: string[];
   cashierName: string;
   lineItems: { label: string; qty: number; price: number }[];
   total: number;
@@ -39,6 +40,7 @@ export default function TicketCheckout() {
     name: '',
     phone: '',
     vehicleNumber: '',
+    tagNumbers: '',
     menTicket: 0,
     womenTicket: 0,
     childTicket: 0,
@@ -105,11 +107,12 @@ export default function TicketCheckout() {
   // Parse items from URL
   useEffect(() => {
     if (router.isReady && Object.keys(prices).length > 0) {
-      const { name, phone, vehicle, men, women, child } = router.query;
+      const { name, phone, vehicle, tags, men, women, child } = router.query;
       const parsedItems = {
         name: (name as string) || '',
         phone: (phone as string) || '',
         vehicleNumber: (vehicle as string) || '',
+        tagNumbers: (tags as string) || '',
         menTicket: parseInt(men as string) || 0,
         womenTicket: parseInt(women as string) || 0,
         childTicket: parseInt(child as string) || 0,
@@ -198,6 +201,7 @@ export default function TicketCheckout() {
           customerName: items.name,
           customerPhone: items.phone,
           vehicleNumber: items.vehicleNumber || null,
+          tagNumbers: items.tagNumbers || null,
           menTicket: items.menTicket,
           womenTicket: items.womenTicket,
           childTicket: items.childTicket,
@@ -221,6 +225,7 @@ export default function TicketCheckout() {
           customerName: items.name,
           customerPhone: items.phone,
           vehicleNumber: items.vehicleNumber,
+          tagNumbers: items.tagNumbers ? items.tagNumbers.split(',').map(t => t.trim()) : undefined,
           cashierName: session?.user?.name || 'Unknown',
           lineItems,
           total: totalDue,
@@ -229,6 +234,14 @@ export default function TicketCheckout() {
         });
         setShowQRModal(false);
         setShowReceipt(true);
+
+        // Increment the next tag number in sessionStorage
+        if (items.tagNumbers) {
+          const tags = items.tagNumbers.split(',').map(t => t.trim());
+          const lastTag = tags[tags.length - 1];
+          const nextTag = (parseInt(lastTag, 10) + 1).toString().padStart(6, '0');
+          sessionStorage.setItem('nextTagNumber', nextTag);
+        }
       } else {
         const error = await res.json();
         alert(`Error: ${error.error || 'Failed to save transaction'}`);
@@ -259,6 +272,9 @@ export default function TicketCheckout() {
     });
     if (items.vehicleNumber) {
       params.set('vehicle', items.vehicleNumber);
+    }
+    if (items.tagNumbers) {
+      params.set('tags', items.tagNumbers);
     }
     router.push(`/ticket-counter?${params.toString()}`);
   };
@@ -321,9 +337,21 @@ export default function TicketCheckout() {
               <span className="text-gray-900 font-medium">+91 {items.phone}</span>
             </div>
             {items.vehicleNumber && (
-              <div className="flex items-center justify-between py-2">
+              <div className="flex items-center justify-between py-2 border-b border-gray-100">
                 <span className="text-gray-600">Vehicle Number</span>
                 <span className="text-gray-900 font-medium">{items.vehicleNumber}</span>
+              </div>
+            )}
+            {items.tagNumbers && (
+              <div className="py-2">
+                <span className="text-gray-600 block mb-1">Tag Numbers</span>
+                <div className="flex flex-wrap gap-2">
+                  {items.tagNumbers.split(',').map((tag, index) => (
+                    <span key={index} className="bg-blue-100 text-blue-800 px-2 py-1 rounded-lg text-sm font-medium">
+                      {tag.trim()}
+                    </span>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -535,6 +563,12 @@ export default function TicketCheckout() {
                   <div className="flex justify-between">
                     <span>Vehicle:</span>
                     <span>{receiptData.vehicleNumber}</span>
+                  </div>
+                )}
+                {receiptData.tagNumbers && receiptData.tagNumbers.length > 0 && (
+                  <div className="pt-1">
+                    <span className="block mb-1">Tag Numbers:</span>
+                    <span className="font-medium text-gray-800">{receiptData.tagNumbers.join(', ')}</span>
                   </div>
                 )}
               </div>
