@@ -116,7 +116,10 @@ export default function Home() {
 
     setLoadingTransaction(true);
     try {
-      const res = await fetch(`/api/transactions?status=active&search=${phoneNumber}`);
+      // Only search today's transactions (in IST)
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+      const tomorrow = new Date(new Date().getTime() + 24 * 60 * 60 * 1000).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+      const res = await fetch(`/api/transactions?status=active&search=${phoneNumber}&startDate=${today}&endDate=${tomorrow}`);
       if (res.ok) {
         const data = await res.json();
         // Find a transaction that matches this phone and doesn't already have a linked child
