@@ -76,6 +76,8 @@ export const transactions = sqliteTable('transactions', {
   returnDetails: text('return_details'), // JSON string storing item-level return data
   totalDeduction: real('total_deduction').default(0),
   actualAmountReturned: real('actual_amount_returned'),
+  // Linked transaction support (for credit against parent advance)
+  parentTransactionId: text('parent_transaction_id'),
 });
 
 // Type exports for use in the app

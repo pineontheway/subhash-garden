@@ -20,6 +20,8 @@ type Transaction = {
   createdAt: string;
   status: 'active' | 'advance_returned';
   isComplimentary: boolean;
+  parentTransactionId?: string | null;
+  linkedTransaction?: Transaction | null;
 };
 
 type ItemReturnState = {
@@ -51,6 +53,13 @@ export default function ReturnAdvance() {
 
   // Item return tracking state - simplified to just track lost items
   const [itemReturns, setItemReturns] = useState<Record<ItemType, ItemReturnState>>({
+    maleCostume: { lost: 0 },
+    femaleCostume: { lost: 0 },
+    kidsCostume: { lost: 0 },
+    tube: { lost: 0 },
+    locker: { lost: 0 },
+  });
+  const [linkedItemReturns, setLinkedItemReturns] = useState<Record<ItemType, ItemReturnState>>({
     maleCostume: { lost: 0 },
     femaleCostume: { lost: 0 },
     kidsCostume: { lost: 0 },
@@ -90,12 +99,13 @@ export default function ReturnAdvance() {
         locker: { lost: 0 },
       };
       setItemReturns(initialState);
+      setLinkedItemReturns(initialState);
       setDeductionNotes('');
     }
   }, [selectedTransaction]);
 
-  // Calculate total deduction based on lost items × item price
-  const totalDeduction = useMemo(() => {
+  // Calculate total deduction based on lost items × item price (parent)
+  const parentDeduction = useMemo(() => {
     let total = 0;
     ITEM_CONFIG.forEach(({ type, priceKey }) => {
       const lost = itemReturns[type].lost;
@@ -105,17 +115,37 @@ export default function ReturnAdvance() {
     return total;
   }, [itemReturns, prices]);
 
+  // Calculate total deduction for linked transaction
+  const linkedDeduction = useMemo(() => {
+    if (!selectedTransaction?.linkedTransaction) return 0;
+    let total = 0;
+    ITEM_CONFIG.forEach(({ type, priceKey }) => {
+      const lost = linkedItemReturns[type].lost;
+      const price = prices[priceKey] || 0;
+      total += lost * price;
+    });
+    return total;
+  }, [selectedTransaction, linkedItemReturns, prices]);
+
+  // Total deduction (parent + linked)
+  const totalDeduction = parentDeduction + linkedDeduction;
+
+  // Linked items cost (the credit amount)
+  const linkedItemsCost = selectedTransaction?.linkedTransaction?.subtotal || 0;
+
   // Calculate amount to return
+  // For parent with linked: advance - linkedItemsCost - parentDeduction - linkedDeduction
   const amountToReturn = useMemo(() => {
     if (!selectedTransaction) return 0;
-    return Math.max(0, selectedTransaction.advance - totalDeduction);
-  }, [selectedTransaction, totalDeduction]);
+    return Math.max(0, selectedTransaction.advance - linkedItemsCost - totalDeduction);
+  }, [selectedTransaction, linkedItemsCost, totalDeduction]);
 
-  // Validation: check lost doesn't exceed given
+  // Validation: check lost doesn't exceed given (for both parent and linked)
   const validationErrors = useMemo(() => {
     if (!selectedTransaction) return [];
     const errors: string[] = [];
 
+    // Validate parent items
     ITEM_CONFIG.forEach(({ type, label, field }) => {
       const given = selectedTransaction[field] as number;
       if (given === 0) return;
@@ -126,8 +156,22 @@ export default function ReturnAdvance() {
       }
     });
 
+    // Validate linked items
+    if (selectedTransaction.linkedTransaction) {
+      const linked = selectedTransaction.linkedTransaction;
+      ITEM_CONFIG.forEach(({ type, label, field }) => {
+        const given = linked[field] as number;
+        if (given === 0) return;
+
+        const lost = linkedItemReturns[type].lost;
+        if (lost > given) {
+          errors.push(`Linked ${label}: Lost (${lost}) cannot exceed given (${given})`);
+        }
+      });
+    }
+
     return errors;
-  }, [selectedTransaction, itemReturns]);
+  }, [selectedTransaction, itemReturns, linkedItemReturns]);
 
   // Check user has role
   useEffect(() => {
@@ -177,7 +221,7 @@ export default function ReturnAdvance() {
 
     setReturning(true);
     try {
-      // Build return details (same deduction logic for VIP and regular)
+      // Build return details for parent (same deduction logic for VIP and regular)
       const items: ItemReturnEntry[] = ITEM_CONFIG
         .filter(({ field }) => (selectedTransaction[field] as number) > 0)
         .map(({ type, field, priceKey }) => {
@@ -197,14 +241,45 @@ export default function ReturnAdvance() {
 
       const returnDetails: ReturnDetails = {
         items,
-        totalDeduction,
+        totalDeduction: parentDeduction,
         notes: deductionNotes || undefined,
       };
+
+      // Build linked return details if there's a linked transaction
+      let linkedReturnDetails: ReturnDetails | undefined;
+      if (selectedTransaction.linkedTransaction) {
+        const linked = selectedTransaction.linkedTransaction;
+        const linkedItems: ItemReturnEntry[] = ITEM_CONFIG
+          .filter(({ field }) => (linked[field] as number) > 0)
+          .map(({ type, field, priceKey }) => {
+            const given = linked[field] as number;
+            const lost = linkedItemReturns[type].lost;
+            const returned = given - lost;
+            const price = prices[priceKey] || 0;
+            return {
+              type,
+              rented: given,
+              returnedGood: returned,
+              returnedDamaged: 0,
+              lost,
+              deduction: lost * price,
+            };
+          });
+
+        linkedReturnDetails = {
+          items: linkedItems,
+          totalDeduction: linkedDeduction,
+        };
+      }
 
       const res = await fetch('/api/transactions', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transactionId: selectedTransaction.id, returnDetails }),
+        body: JSON.stringify({
+          transactionId: selectedTransaction.id,
+          returnDetails,
+          linkedReturnDetails,
+        }),
       });
 
       if (res.ok) {
@@ -230,6 +305,13 @@ export default function ReturnAdvance() {
 
   const updateLostCount = (type: ItemType, value: number) => {
     setItemReturns(prev => ({
+      ...prev,
+      [type]: { lost: value },
+    }));
+  };
+
+  const updateLinkedLostCount = (type: ItemType, value: number) => {
+    setLinkedItemReturns(prev => ({
       ...prev,
       [type]: { lost: value },
     }));
@@ -301,48 +383,89 @@ export default function ReturnAdvance() {
           ) : (
             <div className="space-y-3">
               {transactions.map(transaction => (
-                <div
-                  key={transaction.id}
-                  onClick={() => {
-                    setSelectedTransaction(transaction);
-                    setShowConfirm(true);
-                  }}
-                  className={`bg-white rounded-xl p-4 shadow-[0_2px_10px_rgba(0,0,0,0.08)] cursor-pointer hover:shadow-[0_4px_15px_rgba(0,0,0,0.12)] transition-shadow border-2 border-transparent ${
-                    transaction.isComplimentary ? 'hover:border-purple-200' : 'hover:border-green-200'
-                  }`}
-                >
-                  <div className="flex justify-between items-start mb-2">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium text-gray-800">{transaction.customerName}</p>
-                        {transaction.isComplimentary && (
-                          <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full font-medium">VIP</span>
+                <div key={transaction.id}>
+                  {/* Parent Transaction Card */}
+                  <div
+                    onClick={() => {
+                      setSelectedTransaction(transaction);
+                      setShowConfirm(true);
+                    }}
+                    className={`bg-white rounded-xl p-4 shadow-[0_2px_10px_rgba(0,0,0,0.08)] cursor-pointer hover:shadow-[0_4px_15px_rgba(0,0,0,0.12)] transition-shadow border-2 ${
+                      transaction.linkedTransaction
+                        ? 'border-purple-200 rounded-b-none'
+                        : `border-transparent ${transaction.isComplimentary ? 'hover:border-purple-200' : 'hover:border-green-200'}`
+                    }`}
+                  >
+                    <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-gray-800">{transaction.customerName}</p>
+                          {transaction.isComplimentary && (
+                            <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full font-medium">VIP</span>
+                          )}
+                          {transaction.linkedTransaction && (
+                            <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full font-medium flex items-center gap-1">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                              </svg>
+                              Linked
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm text-gray-500">+91 {transaction.customerPhone}</p>
+                      </div>
+                      <div className="text-right">
+                        {transaction.isComplimentary ? (
+                          <>
+                            <p className="font-semibold text-purple-600">
+                              {transaction.advance > 0 ? `₹${transaction.advance.toFixed(2)}` : '₹0.00'}
+                            </p>
+                            <p className="text-xs text-purple-400">
+                              {transaction.advance > 0 ? 'VIP Advance' : 'Complimentary'}
+                            </p>
+                          </>
+                        ) : (
+                          <>
+                            <p className="font-semibold text-green-600">₹{transaction.advance.toFixed(2)}</p>
+                            <p className="text-xs text-gray-400">Advance</p>
+                          </>
                         )}
                       </div>
-                      <p className="text-sm text-gray-500">+91 {transaction.customerPhone}</p>
                     </div>
-                    <div className="text-right">
-                      {transaction.isComplimentary ? (
-                        <>
-                          <p className="font-semibold text-purple-600">
-                            {transaction.advance > 0 ? `₹${transaction.advance.toFixed(2)}` : '₹0.00'}
-                          </p>
-                          <p className="text-xs text-purple-400">
-                            {transaction.advance > 0 ? 'VIP Advance' : 'Complimentary'}
-                          </p>
-                        </>
-                      ) : (
-                        <>
-                          <p className="font-semibold text-green-600">₹{transaction.advance.toFixed(2)}</p>
-                          <p className="text-xs text-gray-400">Advance</p>
-                        </>
-                      )}
+                    <div className="flex justify-between items-center text-xs text-gray-500 pt-2 border-t border-gray-100">
+                      <span>Receipt: HC-{transaction.id.slice(-8).toUpperCase()}</span>
+                      <span>{new Date(transaction.createdAt + '+05:30').toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' })}</span>
                     </div>
                   </div>
-                  <div className="flex justify-between items-center text-xs text-gray-500 pt-2 border-t border-gray-100">
-                    <span>Receipt: HC-{transaction.id.slice(-8).toUpperCase()}</span>
-                    <span>{new Date(transaction.createdAt + '+05:30').toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' })}</span>
-                  </div>
+
+                  {/* Linked Transaction Card */}
+                  {transaction.linkedTransaction && (
+                    <div
+                      onClick={() => {
+                        setSelectedTransaction(transaction);
+                        setShowConfirm(true);
+                      }}
+                      className="bg-purple-50 rounded-b-xl p-3 border-2 border-t-0 border-purple-200 cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-4 h-4 border-l-2 border-b-2 border-purple-300 rounded-bl"></div>
+                        <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                        </svg>
+                        <span className="text-xs font-medium text-purple-700">Linked Transaction</span>
+                      </div>
+                      <div className="flex justify-between items-center ml-6">
+                        <div className="text-xs text-gray-600">
+                          <span>HC-{transaction.linkedTransaction.id.slice(-8).toUpperCase()}</span>
+                          <span className="mx-2">•</span>
+                          <span>Credit: ₹{transaction.linkedTransaction.subtotal.toFixed(0)}</span>
+                        </div>
+                        <div className="text-xs text-purple-600 font-medium">
+                          Remaining: ₹{(transaction.advance - transaction.linkedTransaction.subtotal).toFixed(0)}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -400,7 +523,9 @@ export default function ReturnAdvance() {
 
               {/* Item Selection */}
               <div className="mb-4">
-                <p className="text-sm font-medium text-gray-700 mb-3">Items to Collect:</p>
+                <p className="text-sm font-medium text-gray-700 mb-3">
+                  {selectedTransaction.linkedTransaction ? 'Parent Items:' : 'Items to Collect:'}
+                </p>
                 <div className="space-y-3">
                   {ITEM_CONFIG.map(({ type, label, field, priceKey }) => {
                     const given = selectedTransaction[field] as number;
@@ -452,6 +577,71 @@ export default function ReturnAdvance() {
                   })}
                 </div>
               </div>
+
+              {/* Linked Transaction Items */}
+              {selectedTransaction.linkedTransaction && (
+                <div className="mb-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                    </svg>
+                    <p className="text-sm font-medium text-purple-700">
+                      Linked Items (HC-{selectedTransaction.linkedTransaction.id.slice(-8).toUpperCase()}):
+                    </p>
+                  </div>
+                  <div className="space-y-3 pl-2 border-l-2 border-purple-200">
+                    {ITEM_CONFIG.map(({ type, label, field, priceKey }) => {
+                      const linked = selectedTransaction.linkedTransaction!;
+                      const given = linked[field] as number;
+                      if (given === 0) return null;
+
+                      const lost = linkedItemReturns[type].lost;
+                      const price = prices[priceKey] || 0;
+                      const deduction = lost * price;
+
+                      return (
+                        <div key={`linked-${type}`} className="bg-purple-50 rounded-xl p-3">
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <span className="font-medium text-gray-800">{label}</span>
+                              <p className="text-xs text-gray-500">₹{price} each</p>
+                            </div>
+                            <div className="flex items-center gap-4">
+                              {/* Given (read-only) */}
+                              <div className="text-center">
+                                <p className="text-xs text-gray-500 mb-1">Given</p>
+                                <div className="w-12 h-9 bg-purple-100 rounded-lg flex items-center justify-center">
+                                  <span className="font-semibold text-purple-700">{given}</span>
+                                </div>
+                              </div>
+                              {/* Lost (dropdown) */}
+                              <div className="text-center">
+                                <p className="text-xs text-red-600 mb-1">Lost</p>
+                                <select
+                                  value={lost}
+                                  onChange={(e) => updateLinkedLostCount(type, parseInt(e.target.value))}
+                                  className="w-14 h-9 px-2 border border-gray-200 rounded-lg text-sm text-gray-900 font-medium text-center focus:outline-none focus:ring-2 focus:ring-red-500"
+                                >
+                                  {generateOptions(given).map(n => (
+                                    <option key={n} value={n}>{n}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+                          </div>
+                          {/* Auto-calculated deduction */}
+                          {lost > 0 && (
+                            <div className="mt-2 pt-2 border-t border-purple-200 flex justify-between items-center">
+                              <span className="text-xs text-gray-600">Deduction ({lost} × ₹{price})</span>
+                              <span className="text-sm font-medium text-red-600">₹{deduction.toFixed(0)}</span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Optional Notes */}
               <div className="mb-4">
@@ -507,21 +697,29 @@ export default function ReturnAdvance() {
                   </div>
                 </div>
               ) : (
-                <div className="bg-green-50 rounded-xl p-4 mb-6">
+                <div className={`rounded-xl p-4 mb-6 ${selectedTransaction.linkedTransaction ? 'bg-purple-50' : 'bg-green-50'}`}>
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-gray-600">Original Advance</span>
                     <span className="font-medium text-gray-800">₹{selectedTransaction.advance.toFixed(2)}</span>
                   </div>
+                  {selectedTransaction.linkedTransaction && (
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-purple-600">Linked Items Credit</span>
+                      <span className="font-medium text-purple-600">-₹{linkedItemsCost.toFixed(2)}</span>
+                    </div>
+                  )}
                   {totalDeduction > 0 && (
                     <div className="flex justify-between items-center mb-2">
-                      <span className="text-red-600">Total Deduction</span>
+                      <span className="text-red-600">Lost Items Deduction</span>
                       <span className="font-medium text-red-600">-₹{totalDeduction.toFixed(2)}</span>
                     </div>
                   )}
-                  <div className="border-t border-green-200 mt-2 pt-2">
+                  <div className={`border-t mt-2 pt-2 ${selectedTransaction.linkedTransaction ? 'border-purple-200' : 'border-green-200'}`}>
                     <div className="flex justify-between items-center">
                       <span className="text-gray-800 font-medium">Amount to Return</span>
-                      <span className="text-2xl font-bold text-green-600">₹{amountToReturn.toFixed(2)}</span>
+                      <span className={`text-2xl font-bold ${selectedTransaction.linkedTransaction ? 'text-purple-600' : 'text-green-600'}`}>
+                        ₹{amountToReturn.toFixed(2)}
+                      </span>
                     </div>
                   </div>
                 </div>

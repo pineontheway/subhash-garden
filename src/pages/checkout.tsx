@@ -22,6 +22,10 @@ type ReceiptData = {
   advance: number;
   totalDue: number;
   isVIP?: boolean;
+  isLinked?: boolean;
+  parentReceiptId?: string;
+  parentAdvance?: number;
+  remainingAdvance?: number;
 };
 
 export default function Checkout() {
@@ -46,6 +50,10 @@ export default function Checkout() {
     locker: 0,
   });
   const [isVIP, setIsVIP] = useState(false);
+
+  // Linked transaction state
+  const [parentTransactionId, setParentTransactionId] = useState<string | null>(null);
+  const [parentAdvance, setParentAdvance] = useState(0);
 
   // Fetch prices from API
   useEffect(() => {
@@ -87,7 +95,7 @@ export default function Checkout() {
   // Parse items from URL
   useEffect(() => {
     if (router.isReady && Object.keys(prices).length > 0) {
-      const { name, phone, male, female, kids, tube, locker } = router.query;
+      const { name, phone, male, female, kids, tube, locker, parentId, parentAdvance: pAdvance } = router.query;
       const parsedItems = {
         name: (name as string) || '',
         phone: (phone as string) || '',
@@ -99,14 +107,21 @@ export default function Checkout() {
       };
       setItems(parsedItems);
 
-      // Calculate subtotal and set as default advance
-      const subtotal =
-        parsedItems.maleCostume * (prices.male_costume || 0) +
-        parsedItems.femaleCostume * (prices.female_costume || 0) +
-        parsedItems.kidsCostume * (prices.kids_costume || 0) +
-        parsedItems.tube * (prices.tube || 0) +
-        parsedItems.locker * (prices.locker || 0);
-      setAdvance(subtotal);
+      // Check if this is a linked transaction
+      if (parentId) {
+        setParentTransactionId(parentId as string);
+        setParentAdvance(parseFloat(pAdvance as string) || 0);
+        setAdvance(0); // Linked transactions don't have their own advance
+      } else {
+        // Calculate subtotal and set as default advance
+        const subtotal =
+          parsedItems.maleCostume * (prices.male_costume || 0) +
+          parsedItems.femaleCostume * (prices.female_costume || 0) +
+          parsedItems.kidsCostume * (prices.kids_costume || 0) +
+          parsedItems.tube * (prices.tube || 0) +
+          parsedItems.locker * (prices.locker || 0);
+        setAdvance(subtotal);
+      }
     }
   }, [router.isReady, router.query, prices]);
 
@@ -118,6 +133,11 @@ export default function Checkout() {
     items.locker * (prices.locker || 0);
 
   const totalDue = subtotal + advance;
+
+  // For linked transactions
+  const isLinked = !!parentTransactionId;
+  const remainingAdvance = isLinked ? parentAdvance - subtotal : 0;
+  const creditExceedsAdvance = isLinked && subtotal > parentAdvance;
 
   // Build line items array for display
   const lineItems: { label: string; qty: number; price: number }[] = [];
@@ -172,6 +192,18 @@ export default function Checkout() {
       return;
     }
 
+    // For linked transactions, validate credit doesn't exceed advance
+    if (isLinked && creditExceedsAdvance) {
+      alert(`Credit amount (₹${subtotal}) exceeds remaining advance (₹${parentAdvance})`);
+      return;
+    }
+
+    // Linked transactions don't require payment - proceed directly
+    if (isLinked) {
+      await saveTransaction();
+      return;
+    }
+
     const finalAmount = isVIP ? advance : totalDue;
 
     // Show QR modal if UPI is configured and there's an amount to pay
@@ -187,9 +219,10 @@ export default function Checkout() {
   const saveTransaction = async () => {
     setSaving(true);
     try {
+      // For linked transactions, no advance is collected
       // VIP: subtotal calculated normally, advance is optional (can be 0)
       // VIP totalDue = just the advance (they don't pay for items)
-      const finalTotalDue = isVIP ? advance : totalDue;
+      const finalTotalDue = isLinked ? subtotal : (isVIP ? advance : totalDue);
 
       const res = await fetch('/api/transactions', {
         method: 'POST',
@@ -203,9 +236,10 @@ export default function Checkout() {
           tube: items.tube,
           locker: items.locker,
           subtotal,
-          advance,
+          advance: isLinked ? 0 : advance,
           totalDue: finalTotalDue,
           isComplimentary: isVIP,
+          parentTransactionId: parentTransactionId || undefined,
         }),
       });
 
@@ -224,9 +258,13 @@ export default function Checkout() {
           cashierName: session?.user?.name || 'Unknown',
           lineItems,
           subtotal,
-          advance,
+          advance: isLinked ? 0 : advance,
           totalDue: finalTotalDue,
           isVIP,
+          isLinked,
+          parentReceiptId: parentTransactionId ? parentTransactionId.slice(-8).toUpperCase() : undefined,
+          parentAdvance: isLinked ? parentAdvance : undefined,
+          remainingAdvance: isLinked ? remainingAdvance : undefined,
         });
         setShowQRModal(false);
         setShowReceipt(true);
@@ -289,8 +327,12 @@ export default function Checkout() {
           </div>
 
           {/* Title */}
-          <h1 className="text-2xl font-bold text-center text-gray-800 mb-1">Checkout</h1>
-          <p className="text-gray-500 text-center mb-2">Please review your charges</p>
+          <h1 className="text-2xl font-bold text-center text-gray-800 mb-1">
+            {isLinked ? 'Credit Transaction' : 'Checkout'}
+          </h1>
+          <p className="text-gray-500 text-center mb-2">
+            {isLinked ? 'Items will be deducted from existing advance' : 'Please review your charges'}
+          </p>
           {session?.user?.name && (
             <p className="text-gray-700 text-center text-lg mb-6">
               Cashier: <span className="font-bold text-gray-900">{session.user.name}</span>
@@ -309,35 +351,75 @@ export default function Checkout() {
             </div>
           </div>
 
-          {/* VIP Toggle */}
-          <div className="bg-purple-50 rounded-2xl p-4 shadow-[0_4px_20px_rgba(0,0,0,0.08)] mb-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="text-purple-800 font-medium">VIP / Complimentary</span>
-                <p className="text-purple-600 text-xs mt-0.5">No charge for items, advance optional</p>
+          {/* Linked Transaction Banner */}
+          {isLinked && (
+            <div className={`rounded-2xl p-4 shadow-[0_4px_20px_rgba(0,0,0,0.08)] mb-4 ${creditExceedsAdvance ? 'bg-red-50 border-2 border-red-200' : 'bg-purple-50 border-2 border-purple-200'}`}>
+              <div className="flex items-center gap-2 mb-3">
+                <svg className={`w-5 h-5 ${creditExceedsAdvance ? 'text-red-600' : 'text-purple-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                </svg>
+                <span className={`font-semibold ${creditExceedsAdvance ? 'text-red-800' : 'text-purple-800'}`}>
+                  Linked to HC-{parentTransactionId?.slice(-8).toUpperCase()}
+                </span>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  if (!isVIP) {
-                    setAdvance(0); // Reset advance to 0 when enabling VIP
-                  } else {
-                    setAdvance(subtotal); // Restore advance to subtotal when disabling VIP
-                  }
-                  setIsVIP(!isVIP);
-                }}
-                className={`relative w-14 h-8 rounded-full transition-colors cursor-pointer ${
-                  isVIP ? 'bg-purple-600' : 'bg-gray-300'
-                }`}
-              >
-                <span
-                  className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow transition-transform ${
-                    isVIP ? 'translate-x-6' : 'translate-x-0'
-                  }`}
-                />
-              </button>
+              <div className="bg-white rounded-lg p-3 space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Parent Advance</span>
+                  <span className="font-medium text-gray-800">₹{parentAdvance.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">This Credit</span>
+                  <span className={`font-medium ${creditExceedsAdvance ? 'text-red-600' : 'text-purple-600'}`}>-₹{subtotal.toFixed(2)}</span>
+                </div>
+                <div className="border-t border-gray-200 pt-2 flex justify-between">
+                  <span className="text-gray-700 font-medium">Remaining Advance</span>
+                  <span className={`font-semibold ${creditExceedsAdvance ? 'text-red-600' : 'text-green-600'}`}>
+                    ₹{remainingAdvance.toFixed(2)}
+                  </span>
+                </div>
+              </div>
+              {creditExceedsAdvance && (
+                <p className="text-red-600 text-sm mt-3 flex items-center gap-1">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  Credit exceeds available advance
+                </p>
+              )}
             </div>
-          </div>
+          )}
+
+          {/* VIP Toggle - Hidden for linked transactions */}
+          {!isLinked && (
+            <div className="bg-purple-50 rounded-2xl p-4 shadow-[0_4px_20px_rgba(0,0,0,0.08)] mb-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-purple-800 font-medium">VIP / Complimentary</span>
+                  <p className="text-purple-600 text-xs mt-0.5">No charge for items, advance optional</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!isVIP) {
+                      setAdvance(0); // Reset advance to 0 when enabling VIP
+                    } else {
+                      setAdvance(subtotal); // Restore advance to subtotal when disabling VIP
+                    }
+                    setIsVIP(!isVIP);
+                  }}
+                  className={`relative w-14 h-8 rounded-full transition-colors cursor-pointer ${
+                    isVIP ? 'bg-purple-600' : 'bg-gray-300'
+                  }`}
+                >
+                  <span
+                    className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow transition-transform ${
+                      isVIP ? 'translate-x-6' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Line Items Card */}
           <div className="bg-white rounded-2xl p-4 shadow-[0_4px_20px_rgba(0,0,0,0.08)] mb-4">
@@ -357,45 +439,47 @@ export default function Checkout() {
             </div>
           </div>
 
-          {/* Advance Card */}
-          <div className={`rounded-2xl p-4 shadow-[0_4px_20px_rgba(0,0,0,0.08)] ${isVIP ? 'bg-purple-50' : 'bg-white'}`}>
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <span className={`font-medium ${isVIP ? 'text-purple-800' : 'text-gray-800'}`}>
-                  {isVIP ? 'Advance (Optional)' : 'Advance'}
-                </span>
-                {isVIP && <p className="text-xs text-purple-600">Refundable deposit</p>}
-              </div>
-              <div className="flex items-center">
-                <button
-                  type="button"
-                  onClick={() => setAdvance(Math.max(0, advance - 50))}
-                  className="w-10 h-8 bg-gray-200 text-gray-600 rounded-l flex items-center justify-center cursor-pointer hover:bg-gray-300"
-                >
-                  −
-                </button>
-                <div className={`h-8 px-3 flex items-center justify-center font-medium min-w-[80px] ${isVIP ? 'bg-purple-100 text-purple-800' : 'bg-gray-100 text-gray-800'}`}>
-                  {advance.toFixed(2)}
+          {/* Advance Card - Hidden for linked transactions */}
+          {!isLinked && (
+            <div className={`rounded-2xl p-4 shadow-[0_4px_20px_rgba(0,0,0,0.08)] ${isVIP ? 'bg-purple-50' : 'bg-white'}`}>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <span className={`font-medium ${isVIP ? 'text-purple-800' : 'text-gray-800'}`}>
+                    {isVIP ? 'Advance (Optional)' : 'Advance'}
+                  </span>
+                  {isVIP && <p className="text-xs text-purple-600">Refundable deposit</p>}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setAdvance(advance + 50)}
-                  className={`w-10 h-8 text-white rounded-r flex items-center justify-center cursor-pointer ${isVIP ? 'bg-purple-600 hover:bg-purple-700' : 'bg-green-600 hover:bg-green-700'}`}
-                >
-                  +
-                </button>
+                <div className="flex items-center">
+                  <button
+                    type="button"
+                    onClick={() => setAdvance(Math.max(0, advance - 50))}
+                    className="w-10 h-8 bg-gray-200 text-gray-600 rounded-l flex items-center justify-center cursor-pointer hover:bg-gray-300"
+                  >
+                    −
+                  </button>
+                  <div className={`h-8 px-3 flex items-center justify-center font-medium min-w-[80px] ${isVIP ? 'bg-purple-100 text-purple-800' : 'bg-gray-100 text-gray-800'}`}>
+                    {advance.toFixed(2)}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAdvance(advance + 50)}
+                    className={`w-10 h-8 text-white rounded-r flex items-center justify-center cursor-pointer ${isVIP ? 'bg-purple-600 hover:bg-purple-700' : 'bg-green-600 hover:bg-green-700'}`}
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+              <div className={`flex items-center justify-between pt-3 border-t ${isVIP ? 'border-purple-200' : 'border-gray-100'}`}>
+                <span className={isVIP ? 'text-purple-700' : 'text-gray-500'}>
+                  {isVIP ? 'Amount to Collect' : 'Total Amount'}
+                </span>
+                <span className={`font-semibold text-lg ${isVIP ? 'text-purple-600' : 'text-green-600'}`}>
+                  ₹{isVIP ? advance.toFixed(2) : totalDue.toFixed(2)}
+                  {isVIP && advance === 0 && <span className="text-sm ml-1">(VIP)</span>}
+                </span>
               </div>
             </div>
-            <div className={`flex items-center justify-between pt-3 border-t ${isVIP ? 'border-purple-200' : 'border-gray-100'}`}>
-              <span className={isVIP ? 'text-purple-700' : 'text-gray-500'}>
-                {isVIP ? 'Amount to Collect' : 'Total Amount'}
-              </span>
-              <span className={`font-semibold text-lg ${isVIP ? 'text-purple-600' : 'text-green-600'}`}>
-                ₹{isVIP ? advance.toFixed(2) : totalDue.toFixed(2)}
-                {isVIP && advance === 0 && <span className="text-sm ml-1">(VIP)</span>}
-              </span>
-            </div>
-          </div>
+          )}
         </main>
 
         {/* Pay Button */}
@@ -403,16 +487,25 @@ export default function Checkout() {
           <button
             type="button"
             onClick={handlePay}
-            disabled={saving}
-            className={`w-full py-4 text-white text-lg font-semibold rounded-xl cursor-pointer disabled:bg-gray-400 disabled:cursor-not-allowed ${
-              isVIP
+            disabled={saving || (isLinked && creditExceedsAdvance)}
+            className={`w-full py-4 text-white text-lg font-semibold rounded-xl cursor-pointer disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${
+              isLinked
                 ? 'bg-purple-600 hover:bg-purple-700 active:bg-purple-800'
-                : 'bg-green-700 hover:bg-green-800 active:bg-green-900'
+                : isVIP
+                  ? 'bg-purple-600 hover:bg-purple-700 active:bg-purple-800'
+                  : 'bg-green-700 hover:bg-green-800 active:bg-green-900'
             }`}
           >
-            {saving ? 'Processing...' : isVIP
-              ? (advance > 0 ? `Collect ₹${advance.toFixed(2)} (VIP)` : 'Complete (VIP)')
-              : `Pay ₹${totalDue.toFixed(2)}`}
+            {isLinked && (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+              </svg>
+            )}
+            {saving ? 'Processing...' : isLinked
+              ? `Complete Credit (₹${subtotal.toFixed(0)})`
+              : isVIP
+                ? (advance > 0 ? `Collect ₹${advance.toFixed(2)} (VIP)` : 'Complete (VIP)')
+                : `Pay ₹${totalDue.toFixed(2)}`}
           </button>
         </div>
       </div>
@@ -510,8 +603,14 @@ export default function Checkout() {
                 </div>
                 <div className="flex justify-between">
                   <span>Receipt #:</span>
-                  <span>HC-{receiptData.id}</span>
+                  <span>HC-{receiptData.id}{receiptData.isLinked ? ' (Linked)' : ''}</span>
                 </div>
+                {receiptData.isLinked && receiptData.parentReceiptId && (
+                  <div className="flex justify-between text-purple-600">
+                    <span>Linked to:</span>
+                    <span>HC-{receiptData.parentReceiptId}</span>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span>Cashier:</span>
                   <span>{receiptData.cashierName}</span>
@@ -548,30 +647,50 @@ export default function Checkout() {
 
               {/* Totals */}
               <div className="space-y-2">
-                <div className="flex justify-between text-gray-600">
-                  <span>Subtotal</span>
-                  <span>₹{receiptData.subtotal.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-gray-600">
-                  <span>Advance Paid</span>
-                  <span>₹{receiptData.advance.toFixed(2)}</span>
-                </div>
-                <div className="w-full border-b border-gray-300 my-2"></div>
-                <div className="flex justify-between text-lg font-bold text-gray-800">
-                  <span>TOTAL AMOUNT</span>
-                  <span>₹{receiptData.totalDue.toFixed(2)}</span>
-                </div>
+                {receiptData.isLinked ? (
+                  <>
+                    <div className="flex justify-between text-gray-600">
+                      <span>Parent Advance</span>
+                      <span>₹{receiptData.parentAdvance?.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-purple-600">
+                      <span>Credit Used</span>
+                      <span>-₹{receiptData.subtotal.toFixed(2)}</span>
+                    </div>
+                    <div className="w-full border-b border-gray-300 my-2"></div>
+                    <div className="flex justify-between text-lg font-bold text-gray-800">
+                      <span>REMAINING ADVANCE</span>
+                      <span>₹{receiptData.remainingAdvance?.toFixed(2)}</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex justify-between text-gray-600">
+                      <span>Subtotal</span>
+                      <span>₹{receiptData.subtotal.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-gray-600">
+                      <span>Advance Paid</span>
+                      <span>₹{receiptData.advance.toFixed(2)}</span>
+                    </div>
+                    <div className="w-full border-b border-gray-300 my-2"></div>
+                    <div className="flex justify-between text-lg font-bold text-gray-800">
+                      <span>TOTAL AMOUNT</span>
+                      <span>₹{receiptData.totalDue.toFixed(2)}</span>
+                    </div>
+                  </>
+                )}
               </div>
 
               <div className="w-full border-b-2 border-dashed border-gray-300 my-4"></div>
 
               {/* Payment Status */}
-              <div className={`text-center py-3 rounded-lg mb-4 ${receiptData.isVIP ? 'bg-purple-50' : 'bg-green-50'}`}>
-                <div className={`flex items-center justify-center gap-2 font-semibold ${receiptData.isVIP ? 'text-purple-700' : 'text-green-700'}`}>
+              <div className={`text-center py-3 rounded-lg mb-4 ${receiptData.isLinked ? 'bg-purple-50' : receiptData.isVIP ? 'bg-purple-50' : 'bg-green-50'}`}>
+                <div className={`flex items-center justify-center gap-2 font-semibold ${receiptData.isLinked ? 'text-purple-700' : receiptData.isVIP ? 'text-purple-700' : 'text-green-700'}`}>
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  {receiptData.isVIP ? 'VIP - COMPLIMENTARY' : 'PAYMENT RECEIVED'}
+                  {receiptData.isLinked ? 'CREDIT APPLIED' : receiptData.isVIP ? 'VIP - COMPLIMENTARY' : 'PAYMENT RECEIVED'}
                 </div>
               </div>
 

@@ -22,6 +22,8 @@ type Transaction = {
   totalDeduction: number | null;
   actualAmountReturned: number | null;
   isComplimentary: boolean;
+  parentTransactionId?: string | null;
+  linkedTransaction?: Transaction | null;
 };
 
 type TicketTransaction = {
@@ -46,7 +48,7 @@ export default function MySummary() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [ticketTransactions, setTicketTransactions] = useState<TicketTransaction[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'advance_returned'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'advance_returned' | 'linked'>('all');
   const [counterType, setCounterType] = useState<'clothes' | 'ticket'>('clothes');
 
   // Check user has role
@@ -147,7 +149,9 @@ export default function MySummary() {
   // Filter transactions based on status
   const filteredTransactions = statusFilter === 'all'
     ? transactions
-    : transactions.filter(t => t.status === statusFilter);
+    : statusFilter === 'linked'
+      ? transactions.filter(t => t.linkedTransaction)
+      : transactions.filter(t => t.status === statusFilter);
 
   // Calculate summary for ticket counter
   const ticketTotalTransactions = ticketTransactions.length;
@@ -367,7 +371,7 @@ export default function MySummary() {
               )}
 
               {/* Status Filter */}
-              <div className="flex gap-2 mb-4">
+              <div className="flex gap-2 mb-4 flex-wrap">
                 <button
                   type="button"
                   onClick={() => setStatusFilter('all')}
@@ -384,7 +388,7 @@ export default function MySummary() {
                   onClick={() => setStatusFilter('active')}
                   className={`px-4 py-2 rounded-lg text-sm font-medium cursor-pointer ${
                     statusFilter === 'active'
-                      ? 'bg-purple-600 text-white'
+                      ? 'bg-blue-600 text-white'
                       : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                   }`}
                 >
@@ -401,6 +405,20 @@ export default function MySummary() {
                 >
                   Returned ({transactions.filter(t => t.status === 'advance_returned').length})
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter('linked')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium cursor-pointer flex items-center gap-1 ${
+                    statusFilter === 'linked'
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                  </svg>
+                  Linked ({transactions.filter(t => t.linkedTransaction).length})
+                </button>
               </div>
 
               {/* Transactions List */}
@@ -415,75 +433,119 @@ export default function MySummary() {
                       ? 'No transactions yet today'
                       : statusFilter === 'active'
                         ? 'No active transactions'
-                        : 'No returned transactions'}
+                        : statusFilter === 'linked'
+                          ? 'No linked transactions'
+                          : 'No returned transactions'}
                   </p>
                 </div>
               ) : (
                 <div className="space-y-3">
                   {filteredTransactions.map(transaction => (
-                    <div key={transaction.id} className={`bg-white rounded-xl p-4 shadow-[0_2px_10px_rgba(0,0,0,0.08)] ${transaction.isComplimentary ? 'border-l-4 border-purple-400' : ''}`}>
-                      <div className="flex justify-between items-start mb-2">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <p className="font-medium text-gray-800">{transaction.customerName}</p>
-                            {transaction.isComplimentary && (
-                              <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full font-medium">VIP</span>
-                            )}
-                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                              transaction.status === 'active'
-                                ? 'bg-blue-100 text-blue-700'
-                                : 'bg-orange-100 text-orange-700'
-                            }`}>
-                              {transaction.status === 'active' ? 'Active' : 'Returned'}
-                            </span>
+                    <div key={transaction.id}>
+                      {/* Parent Transaction Card */}
+                      <div className={`bg-white p-4 shadow-[0_2px_10px_rgba(0,0,0,0.08)] ${
+                        transaction.linkedTransaction
+                          ? 'rounded-t-xl border-2 border-b-0 border-purple-200'
+                          : `rounded-xl ${transaction.isComplimentary ? 'border-l-4 border-purple-400' : ''}`
+                      }`}>
+                        <div className="flex justify-between items-start mb-2">
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="font-medium text-gray-800">{transaction.customerName}</p>
+                              {transaction.isComplimentary && (
+                                <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full font-medium">VIP</span>
+                              )}
+                              {transaction.linkedTransaction && (
+                                <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full font-medium flex items-center gap-1">
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                                  </svg>
+                                  Linked
+                                </span>
+                              )}
+                              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                                transaction.status === 'active'
+                                  ? 'bg-blue-100 text-blue-700'
+                                  : 'bg-orange-100 text-orange-700'
+                              }`}>
+                                {transaction.status === 'active' ? 'Active' : 'Returned'}
+                              </span>
+                            </div>
+                            <p className="text-sm text-gray-500">+91 {transaction.customerPhone}</p>
                           </div>
-                          <p className="text-sm text-gray-500">+91 {transaction.customerPhone}</p>
+                          <div className="text-right">
+                            {transaction.isComplimentary ? (
+                              <>
+                                <p className="font-semibold text-purple-600">
+                                  {transaction.advance > 0 ? `₹${transaction.advance.toFixed(2)}` : '₹0.00'}
+                                </p>
+                                <p className="text-xs text-purple-400">
+                                  {transaction.advance > 0 ? 'VIP Advance' : 'Complimentary'}
+                                </p>
+                              </>
+                            ) : (
+                              <>
+                                <p className="font-semibold text-green-600">
+                                  ₹{transaction.status === 'advance_returned'
+                                    ? (transaction.subtotal + (transaction.totalDeduction ?? 0)).toFixed(2)
+                                    : transaction.totalDue.toFixed(2)}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  {new Date(transaction.createdAt + '+05:30').toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' })}
+                                </p>
+                              </>
+                            )}
+                          </div>
                         </div>
-                        <div className="text-right">
+                        <div className="flex justify-between items-center text-sm text-gray-500 pt-2 border-t border-gray-100">
+                          <span>Receipt: HC-{transaction.id.slice(-8).toUpperCase()}</span>
                           {transaction.isComplimentary ? (
-                            <>
-                              <p className="font-semibold text-purple-600">
-                                {transaction.advance > 0 ? `₹${transaction.advance.toFixed(2)}` : '₹0.00'}
-                              </p>
-                              <p className="text-xs text-purple-400">
-                                {transaction.advance > 0 ? 'VIP Advance' : 'Complimentary'}
-                              </p>
-                            </>
+                            <span className="text-purple-500">
+                              {transaction.status === 'advance_returned' && transaction.advance > 0
+                                ? `Returned: ₹${transaction.actualAmountReturned?.toFixed(0) ?? transaction.advance.toFixed(0)}`
+                                : transaction.advance > 0
+                                  ? `Advance: ₹${transaction.advance.toFixed(0)}`
+                                  : 'VIP - No payment'}
+                            </span>
+                          ) : transaction.status === 'advance_returned' && transaction.actualAmountReturned !== null ? (
+                            <span>
+                              Returned: ₹{transaction.actualAmountReturned.toFixed(0)}
+                              {transaction.totalDeduction && transaction.totalDeduction > 0 && (
+                                <span className="text-red-500 ml-1">(-₹{transaction.totalDeduction.toFixed(0)})</span>
+                              )}
+                            </span>
                           ) : (
-                            <>
-                              <p className="font-semibold text-green-600">
-                                ₹{transaction.status === 'advance_returned'
-                                  ? (transaction.subtotal + (transaction.totalDeduction ?? 0)).toFixed(2)
-                                  : transaction.totalDue.toFixed(2)}
-                              </p>
-                              <p className="text-xs text-gray-500">
-                                {new Date(transaction.createdAt + '+05:30').toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' })}
-                              </p>
-                            </>
+                            <span>Advance: ₹{transaction.advance.toFixed(0)}</span>
                           )}
                         </div>
                       </div>
-                      <div className="flex justify-between items-center text-sm text-gray-500 pt-2 border-t border-gray-100">
-                        <span>Receipt: HC-{transaction.id.slice(-8).toUpperCase()}</span>
-                        {transaction.isComplimentary ? (
-                          <span className="text-purple-500">
-                            {transaction.status === 'advance_returned' && transaction.advance > 0
-                              ? `Returned: ₹${transaction.actualAmountReturned?.toFixed(0) ?? transaction.advance.toFixed(0)}`
-                              : transaction.advance > 0
-                                ? `Advance: ₹${transaction.advance.toFixed(0)}`
-                                : 'VIP - No payment'}
-                          </span>
-                        ) : transaction.status === 'advance_returned' && transaction.actualAmountReturned !== null ? (
-                          <span>
-                            Returned: ₹{transaction.actualAmountReturned.toFixed(0)}
-                            {transaction.totalDeduction && transaction.totalDeduction > 0 && (
-                              <span className="text-red-500 ml-1">(-₹{transaction.totalDeduction.toFixed(0)})</span>
-                            )}
-                          </span>
-                        ) : (
-                          <span>Advance: ₹{transaction.advance.toFixed(0)}</span>
-                        )}
-                      </div>
+
+                      {/* Linked Transaction Card */}
+                      {transaction.linkedTransaction && (
+                        <div className="bg-purple-50 rounded-b-xl p-3 border-2 border-t-0 border-purple-200">
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className="w-4 h-4 border-l-2 border-b-2 border-purple-300 rounded-bl"></div>
+                            <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                            </svg>
+                            <span className="text-xs font-medium text-purple-700">Linked Transaction</span>
+                          </div>
+                          <div className="flex justify-between items-center ml-6">
+                            <div className="text-xs text-gray-600">
+                              <span>HC-{transaction.linkedTransaction.id.slice(-8).toUpperCase()}</span>
+                              <span className="mx-2">•</span>
+                              <span>Credit: ₹{transaction.linkedTransaction.subtotal.toFixed(0)}</span>
+                            </div>
+                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                              transaction.linkedTransaction.status === 'active'
+                                ? 'bg-blue-100 text-blue-700'
+                                : 'bg-orange-100 text-orange-700'
+                            }`}>
+                              {transaction.linkedTransaction.status === 'active' ? 'Active' : 'Returned'}
+                            </span>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

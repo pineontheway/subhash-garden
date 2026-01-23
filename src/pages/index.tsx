@@ -1,7 +1,24 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import { signIn, signOut, useSession } from 'next-auth/react';
+
+// Type for existing transaction with potential linked child
+type ExistingTransaction = {
+  id: string;
+  customerName: string;
+  customerPhone: string;
+  maleCostume: number;
+  femaleCostume: number;
+  kidsCostume: number;
+  tube: number;
+  locker: number;
+  subtotal: number;
+  advance: number;
+  status: string;
+  createdAt: string;
+  linkedTransaction?: ExistingTransaction | null;
+};
 
 // Format date in Indian timezone
 const formatIndianDate = () => {
@@ -38,6 +55,11 @@ export default function Home() {
   const [locker, setLocker] = useState(0);
   const [currentTime, setCurrentTime] = useState('');
   const [currentDate, setCurrentDate] = useState('');
+
+  // Linked transaction state
+  const [existingTransaction, setExistingTransaction] = useState<ExistingTransaction | null>(null);
+  const [loadingTransaction, setLoadingTransaction] = useState(false);
+  const [isLinking, setIsLinking] = useState(false);
 
   // Update date and time on mount and every minute
   useEffect(() => {
@@ -83,6 +105,61 @@ export default function Home() {
       if (qLocker) setLocker(parseInt(qLocker as string) || 0);
     }
   }, [router.isReady, router.query]);
+
+  // Search for existing transaction when phone number is complete
+  const searchExistingTransaction = useCallback(async (phoneNumber: string) => {
+    if (phoneNumber.length !== 10) {
+      setExistingTransaction(null);
+      setIsLinking(false);
+      return;
+    }
+
+    setLoadingTransaction(true);
+    try {
+      const res = await fetch(`/api/transactions?status=active&search=${phoneNumber}`);
+      if (res.ok) {
+        const data = await res.json();
+        // Find a transaction that matches this phone and doesn't already have a linked child
+        const matching = data.find((t: ExistingTransaction) =>
+          t.customerPhone === phoneNumber && !t.linkedTransaction
+        );
+        setExistingTransaction(matching || null);
+        if (!matching) {
+          setIsLinking(false);
+        }
+      }
+    } catch (error) {
+      console.error('Error searching transactions:', error);
+    }
+    setLoadingTransaction(false);
+  }, []);
+
+  // Debounced phone search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (phone.length === 10 && status === 'authenticated') {
+        searchExistingTransaction(phone);
+      } else {
+        setExistingTransaction(null);
+        setIsLinking(false);
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [phone, status, searchExistingTransaction]);
+
+  // Handle linking to existing transaction
+  const handleLinkTransaction = () => {
+    if (existingTransaction) {
+      setIsLinking(true);
+      setName(existingTransaction.customerName); // Auto-fill name from parent
+    }
+  };
+
+  // Handle unlinking
+  const handleUnlink = () => {
+    setIsLinking(false);
+  };
 
   // Show loading while checking auth
   if (status === 'loading') {
@@ -214,7 +291,15 @@ export default function Home() {
       alert('Please select at least one item');
       return;
     }
-    router.push(`/checkout?name=${encodeURIComponent(name)}&phone=${encodeURIComponent(phone)}&male=${maleCostume}&female=${femaleCostume}&kids=${kidsCostume}&tube=${tube}&locker=${locker}`);
+
+    // Build checkout URL with optional parentTransactionId for linked transactions
+    let checkoutUrl = `/checkout?name=${encodeURIComponent(name)}&phone=${encodeURIComponent(phone)}&male=${maleCostume}&female=${femaleCostume}&kids=${kidsCostume}&tube=${tube}&locker=${locker}`;
+
+    if (isLinking && existingTransaction) {
+      checkoutUrl += `&parentId=${existingTransaction.id}&parentAdvance=${existingTransaction.advance}`;
+    }
+
+    router.push(checkoutUrl);
   };
 
   // Counter button styles
@@ -309,10 +394,10 @@ export default function Home() {
         <main className="p-5 space-y-4 pb-32">
           {/* Name Input */}
           <div>
-            <label className="block text-gray-700 mb-2">Name</label>
+            <label className="block text-gray-700 mb-2">Customer Name</label>
             <input
               type="text"
-              placeholder="Enter your name"
+              placeholder="Enter customer name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="w-full px-4 py-3 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
@@ -340,6 +425,82 @@ export default function Home() {
               />
             </div>
           </div>
+
+          {/* Existing Transaction Card */}
+          {loadingTransaction && (
+            <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+              <p className="text-gray-500 text-center">Searching for existing transaction...</p>
+            </div>
+          )}
+
+          {existingTransaction && !loadingTransaction && (
+            <div className={`rounded-xl p-4 border-2 ${isLinking ? 'bg-purple-50 border-purple-300' : 'bg-amber-50 border-amber-200'}`}>
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="font-medium text-amber-800">Existing Transaction Found</span>
+                </div>
+                {isLinking && (
+                  <span className="text-xs px-2 py-1 bg-purple-200 text-purple-700 rounded-full font-medium">
+                    Linking
+                  </span>
+                )}
+              </div>
+
+              <div className="bg-white rounded-lg p-3 mb-3">
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <p className="font-medium text-gray-800">{existingTransaction.customerName}</p>
+                    <p className="text-sm text-gray-500">HC-{existingTransaction.id.slice(-8).toUpperCase()}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-semibold text-green-600">₹{existingTransaction.advance.toFixed(0)}</p>
+                    <p className="text-xs text-gray-400">Advance</p>
+                  </div>
+                </div>
+                <div className="text-xs text-gray-500 flex flex-wrap gap-2">
+                  {existingTransaction.maleCostume > 0 && <span>Male: {existingTransaction.maleCostume}</span>}
+                  {existingTransaction.femaleCostume > 0 && <span>Female: {existingTransaction.femaleCostume}</span>}
+                  {existingTransaction.kidsCostume > 0 && <span>Kids: {existingTransaction.kidsCostume}</span>}
+                  {existingTransaction.tube > 0 && <span>Tube: {existingTransaction.tube}</span>}
+                  {existingTransaction.locker > 0 && <span>Locker: {existingTransaction.locker}</span>}
+                </div>
+                {existingTransaction.linkedTransaction && (
+                  <div className="mt-2 pt-2 border-t border-gray-100">
+                    <p className="text-xs text-red-500 font-medium">Already has a linked transaction</p>
+                  </div>
+                )}
+              </div>
+
+              {!existingTransaction.linkedTransaction && (
+                isLinking ? (
+                  <button
+                    type="button"
+                    onClick={handleUnlink}
+                    className="w-full py-2 bg-gray-200 text-gray-700 font-medium rounded-lg hover:bg-gray-300 cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                    Cancel Linking
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleLinkTransaction}
+                    className="w-full py-2 bg-purple-600 text-white font-medium rounded-lg hover:bg-purple-700 cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                    </svg>
+                    Link to This Transaction
+                  </button>
+                )
+              )}
+            </div>
+          )}
 
           {/* Costumes Card */}
           <div className="bg-white rounded-2xl p-5 shadow-[0_4px_20px_rgba(0,0,0,0.08)]">
@@ -406,9 +567,18 @@ export default function Home() {
           <button
             type="button"
             onClick={handleCheckout}
-            className="w-full py-4 bg-green-700 text-white text-lg font-semibold rounded-xl hover:bg-green-800 active:bg-green-900 cursor-pointer"
+            className={`w-full py-4 text-white text-lg font-semibold rounded-xl cursor-pointer flex items-center justify-center gap-2 ${
+              isLinking
+                ? 'bg-purple-600 hover:bg-purple-700 active:bg-purple-800'
+                : 'bg-green-700 hover:bg-green-800 active:bg-green-900'
+            }`}
           >
-            Proceed
+            {isLinking && (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+              </svg>
+            )}
+            {isLinking ? 'Proceed as Credit' : 'Proceed'}
           </button>
         </div>
       </div>
