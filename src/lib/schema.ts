@@ -78,6 +78,8 @@ export const transactions = sqliteTable('transactions', {
   actualAmountReturned: real('actual_amount_returned'),
   // Linked transaction support (for credit against parent advance)
   parentTransactionId: text('parent_transaction_id'),
+  // Payment method
+  paymentMethod: text('payment_method', { enum: ['upi', 'cash', 'split'] }),
 });
 
 // Type exports for use in the app

@@ -51,6 +51,11 @@ export default function Checkout() {
   });
   const [isVIP, setIsVIP] = useState(false);
 
+  // Payment method state
+  const [paymentMethod, setPaymentMethod] = useState<'upi' | 'cash' | 'split'>('upi');
+  const [splitUpi, setSplitUpi] = useState(0);
+  const [splitCash, setSplitCash] = useState(0);
+
   // Linked transaction state
   const [parentTransactionId, setParentTransactionId] = useState<string | null>(null);
   const [parentAdvance, setParentAdvance] = useState(0);
@@ -206,14 +211,39 @@ export default function Checkout() {
 
     const finalAmount = isVIP ? advance : totalDue;
 
-    // Show QR modal if UPI is configured and there's an amount to pay
-    if (upiSettings.upi_id && finalAmount > 0) {
-      setShowQRModal(true);
+    // VIP with 0 advance - proceed directly
+    if (isVIP && advance === 0) {
+      await saveTransaction();
       return;
     }
 
-    // Otherwise proceed directly (VIP with 0 advance or no UPI configured)
-    await saveTransaction();
+    // Validate split amounts
+    if (paymentMethod === 'split') {
+      if (splitUpi + splitCash !== finalAmount) {
+        alert(`Split amounts (₹${splitUpi + splitCash}) must equal total (₹${finalAmount})`);
+        return;
+      }
+    }
+
+    // Handle payment method
+    if (paymentMethod === 'cash') {
+      // Cash payment - save directly
+      await saveTransaction();
+    } else if (paymentMethod === 'upi') {
+      // UPI payment - show QR modal
+      if (upiSettings.upi_id && finalAmount > 0) {
+        setShowQRModal(true);
+      } else {
+        await saveTransaction();
+      }
+    } else if (paymentMethod === 'split') {
+      // Split payment - show QR modal for UPI portion if any
+      if (splitUpi > 0 && upiSettings.upi_id) {
+        setShowQRModal(true);
+      } else {
+        await saveTransaction();
+      }
+    }
   };
 
   const saveTransaction = async () => {
@@ -240,6 +270,7 @@ export default function Checkout() {
           totalDue: finalTotalDue,
           isComplimentary: isVIP,
           parentTransactionId: parentTransactionId || undefined,
+          paymentMethod: isLinked ? undefined : paymentMethod,
         }),
       });
 
@@ -480,6 +511,113 @@ export default function Checkout() {
               </div>
             </div>
           )}
+
+          {/* Payment Method Selection - Hidden for linked and VIP with 0 advance */}
+          {!isLinked && !(isVIP && advance === 0) && (
+            <div className="bg-white rounded-2xl p-4 shadow-[0_4px_20px_rgba(0,0,0,0.08)] mt-4">
+              <span className="text-gray-800 font-medium block mb-3">Payment Method</span>
+              <div className="flex gap-2 mb-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPaymentMethod('upi');
+                    setSplitUpi(0);
+                    setSplitCash(0);
+                  }}
+                  className={`flex-1 py-2 px-3 rounded-lg font-medium transition-colors cursor-pointer ${
+                    paymentMethod === 'upi'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  UPI
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPaymentMethod('cash');
+                    setSplitUpi(0);
+                    setSplitCash(0);
+                  }}
+                  className={`flex-1 py-2 px-3 rounded-lg font-medium transition-colors cursor-pointer ${
+                    paymentMethod === 'cash'
+                      ? 'bg-green-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  Cash
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPaymentMethod('split');
+                    const amountToPay = isVIP ? advance : totalDue;
+                    setSplitUpi(Math.floor(amountToPay / 2));
+                    setSplitCash(amountToPay - Math.floor(amountToPay / 2));
+                  }}
+                  className={`flex-1 py-2 px-3 rounded-lg font-medium transition-colors cursor-pointer ${
+                    paymentMethod === 'split'
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  Split
+                </button>
+              </div>
+
+              {/* Split Payment Inputs */}
+              {paymentMethod === 'split' && (
+                <div className="bg-purple-50 rounded-lg p-3 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <label className="text-gray-700 w-16">UPI</label>
+                    <div className="flex-1 relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">₹</span>
+                      <input
+                        type="number"
+                        value={splitUpi || ''}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value) || 0;
+                          const amountToPay = isVIP ? advance : totalDue;
+                          setSplitUpi(val);
+                          setSplitCash(Math.max(0, amountToPay - val));
+                        }}
+                        className="w-full pl-8 pr-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-900 bg-white"
+                        placeholder="0"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <label className="text-gray-700 w-16">Cash</label>
+                    <div className="flex-1 relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">₹</span>
+                      <input
+                        type="number"
+                        value={splitCash || ''}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value) || 0;
+                          const amountToPay = isVIP ? advance : totalDue;
+                          setSplitCash(val);
+                          setSplitUpi(Math.max(0, amountToPay - val));
+                        }}
+                        className="w-full pl-8 pr-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-900 bg-white"
+                        placeholder="0"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-between text-sm pt-2 border-t border-purple-200">
+                    <span className="text-purple-700">Total</span>
+                    <span className={`font-medium ${
+                      splitUpi + splitCash === (isVIP ? advance : totalDue)
+                        ? 'text-green-600'
+                        : 'text-red-600'
+                    }`}>
+                      ₹{(splitUpi + splitCash).toFixed(2)} / ₹{(isVIP ? advance : totalDue).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </main>
 
         {/* Pay Button */}
@@ -515,13 +653,15 @@ export default function Checkout() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-sm w-full overflow-hidden">
             {/* Modal Header */}
-            <div className={`p-5 text-center ${isVIP ? 'bg-purple-50' : 'bg-green-50'}`}>
-              <div className={`w-12 h-12 mx-auto rounded-full flex items-center justify-center mb-3 ${isVIP ? 'bg-purple-100' : 'bg-green-100'}`}>
-                <svg className={`w-6 h-6 ${isVIP ? 'text-purple-600' : 'text-green-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className={`p-5 text-center ${paymentMethod === 'split' ? 'bg-purple-50' : isVIP ? 'bg-purple-50' : 'bg-green-50'}`}>
+              <div className={`w-12 h-12 mx-auto rounded-full flex items-center justify-center mb-3 ${paymentMethod === 'split' ? 'bg-purple-100' : isVIP ? 'bg-purple-100' : 'bg-green-100'}`}>
+                <svg className={`w-6 h-6 ${paymentMethod === 'split' ? 'text-purple-600' : isVIP ? 'text-purple-600' : 'text-green-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
                 </svg>
               </div>
-              <h2 className={`text-xl font-bold ${isVIP ? 'text-purple-800' : 'text-green-800'}`}>Scan to Pay</h2>
+              <h2 className={`text-xl font-bold ${paymentMethod === 'split' ? 'text-purple-800' : isVIP ? 'text-purple-800' : 'text-green-800'}`}>
+                {paymentMethod === 'split' ? 'Scan for UPI Portion' : 'Scan to Pay'}
+              </h2>
               <p className="text-gray-600 text-sm mt-1">Ask customer to scan with any UPI app</p>
             </div>
 
@@ -529,7 +669,7 @@ export default function Checkout() {
             <div className="p-6">
               <div className="bg-white border-2 border-gray-100 rounded-xl p-4 flex justify-center">
                 <QRCodeSVG
-                  value={generateUpiUri(isVIP ? advance : totalDue)}
+                  value={generateUpiUri(paymentMethod === 'split' ? splitUpi : (isVIP ? advance : totalDue))}
                   size={200}
                   level="H"
                   includeMargin={true}
@@ -537,11 +677,18 @@ export default function Checkout() {
               </div>
 
               {/* Amount Display */}
-              <div className={`mt-4 p-4 rounded-xl text-center ${isVIP ? 'bg-purple-50' : 'bg-green-50'}`}>
-                <p className="text-gray-600 text-sm">Amount to Pay</p>
-                <p className={`text-3xl font-bold ${isVIP ? 'text-purple-600' : 'text-green-600'}`}>
-                  ₹{(isVIP ? advance : totalDue).toFixed(2)}
+              <div className={`mt-4 p-4 rounded-xl text-center ${paymentMethod === 'split' ? 'bg-purple-50' : isVIP ? 'bg-purple-50' : 'bg-green-50'}`}>
+                <p className="text-gray-600 text-sm">
+                  {paymentMethod === 'split' ? 'UPI Amount' : 'Amount to Pay'}
                 </p>
+                <p className={`text-3xl font-bold ${paymentMethod === 'split' ? 'text-purple-600' : isVIP ? 'text-purple-600' : 'text-green-600'}`}>
+                  ₹{(paymentMethod === 'split' ? splitUpi : (isVIP ? advance : totalDue)).toFixed(2)}
+                </p>
+                {paymentMethod === 'split' && (
+                  <p className="text-gray-500 text-sm mt-2">
+                    + ₹{splitCash.toFixed(2)} Cash
+                  </p>
+                )}
               </div>
 
               {/* UPI ID Display */}
@@ -567,12 +714,14 @@ export default function Checkout() {
                 onClick={saveTransaction}
                 disabled={saving}
                 className={`flex-1 py-3 text-white font-semibold rounded-xl cursor-pointer disabled:bg-gray-400 ${
-                  isVIP
+                  paymentMethod === 'split'
                     ? 'bg-purple-600 hover:bg-purple-700'
-                    : 'bg-green-600 hover:bg-green-700'
+                    : isVIP
+                      ? 'bg-purple-600 hover:bg-purple-700'
+                      : 'bg-green-600 hover:bg-green-700'
                 }`}
               >
-                {saving ? 'Processing...' : 'Payment Received'}
+                {saving ? 'Processing...' : paymentMethod === 'split' ? 'Payment Received' : 'Payment Received'}
               </button>
             </div>
           </div>

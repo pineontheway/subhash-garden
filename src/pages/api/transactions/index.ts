@@ -42,7 +42,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         advance,
         totalDue,
         isComplimentary,
-        parentTransactionId
+        parentTransactionId,
+        paymentMethod
       } = req.body;
 
       if (!customerName || !customerPhone) {
@@ -104,6 +105,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         isComplimentary: isComplimentary || false,
         createdAt: getISTTimestamp(),
         parentTransactionId: parentTransactionId || null,
+        paymentMethod: parentTransactionId ? null : (paymentMethod || 'cash'), // Linked transactions have no payment
       };
 
       await db.insert(transactions).values(transaction);
