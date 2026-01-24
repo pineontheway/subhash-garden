@@ -740,7 +740,10 @@ export default function Checkout() {
               {/* Header */}
               <div className="text-center mb-4">
                 <div className="text-2xl mb-1">🏊</div>
-                <h2 className="text-xl font-bold text-gray-800">Subhash Garden</h2>
+                <div className="flex items-center justify-center gap-2">
+                  <img src="/logo.png" alt="Subhash Garden" className="w-8 h-8 rounded-full object-cover" />
+                  <h2 className="text-xl font-bold text-gray-800">Subhash Garden</h2>
+                </div>
                 <div className="w-full border-b-2 border-dashed border-gray-300 my-3"></div>
               </div>
 

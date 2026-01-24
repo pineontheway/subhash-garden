@@ -9,6 +9,8 @@ export default function StartSession() {
   const [startingTag, setStartingTag] = useState('');
   const [totalTags, setTotalTags] = useState('');
   const [error, setError] = useState('');
+  const [loadingTags, setLoadingTags] = useState(true);
+  const [continuingFrom, setContinuingFrom] = useState<string | null>(null);
 
   // Get today's date in IST
   const today = new Date().toLocaleDateString('en-IN', {
@@ -37,6 +39,57 @@ export default function StartSession() {
       router.push('/');
     }
   }, [status, session, router]);
+
+  // Fetch today's transactions to find the last used tag
+  useEffect(() => {
+    async function fetchLastTag() {
+      try {
+        // Get today's date in IST for API query
+        const now = new Date();
+        const istOptions: Intl.DateTimeFormatOptions = {
+          timeZone: 'Asia/Kolkata',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+        };
+        const formatter = new Intl.DateTimeFormat('en-CA', istOptions);
+        const todayIST = formatter.format(now);
+
+        // Fetch today's transactions
+        const res = await fetch(`/api/ticket-transactions?startDate=${todayIST}&endDate=${todayIST}T23:59:59`);
+        if (res.ok) {
+          const transactions = await res.json();
+
+          // Find the highest tag number used today
+          let maxTag = 0;
+          transactions.forEach((t: { tagNumbers?: string }) => {
+            if (t.tagNumbers) {
+              const tags = t.tagNumbers.split(',').map((tag: string) => parseInt(tag.trim(), 10));
+              tags.forEach((tag: number) => {
+                if (!isNaN(tag) && tag > maxTag) {
+                  maxTag = tag;
+                }
+              });
+            }
+          });
+
+          if (maxTag > 0) {
+            // Pre-fill with next tag number
+            const nextTag = (maxTag + 1).toString().padStart(6, '0');
+            setStartingTag(nextTag);
+            setContinuingFrom(maxTag.toString().padStart(6, '0'));
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching last tag:', error);
+      }
+      setLoadingTags(false);
+    }
+
+    if (status === 'authenticated') {
+      fetchLastTag();
+    }
+  }, [status]);
 
   // Show loading while checking auth
   if (status === 'loading') {
@@ -141,21 +194,45 @@ export default function StartSession() {
           <div className="bg-white rounded-2xl p-5 shadow-[0_4px_20px_rgba(0,0,0,0.08)]">
             <h2 className="text-lg font-semibold text-gray-800 mb-2">Starting Tag Number</h2>
             <p className="text-sm text-gray-500 mb-4">
-              Enter the first tag number you received today. Tags will auto-increment from this number.
+              {continuingFrom
+                ? 'Continuing from previous shift. You can adjust if needed.'
+                : 'Enter the first tag number you received today. Tags will auto-increment from this number.'}
             </p>
 
-            <input
-              type="text"
-              placeholder="e.g., 100001"
-              value={startingTag}
-              onChange={(e) => {
-                const value = e.target.value.replace(/\D/g, '').slice(0, 6);
-                setStartingTag(value);
-                setError('');
-              }}
-              maxLength={6}
-              className="w-full px-4 py-4 text-2xl text-center font-mono tracking-widest border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
+            {continuingFrom && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
+                <div className="flex items-center gap-2 text-green-700">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="text-sm font-medium">
+                    Last tag used today: <span className="font-bold">{continuingFrom}</span>
+                  </span>
+                </div>
+                <p className="text-xs text-green-600 mt-1 ml-7">
+                  Pre-filled with next available tag number
+                </p>
+              </div>
+            )}
+
+            {loadingTags ? (
+              <div className="w-full px-4 py-4 text-center text-gray-400">
+                Checking today's tags...
+              </div>
+            ) : (
+              <input
+                type="text"
+                placeholder="e.g., 100001"
+                value={startingTag}
+                onChange={(e) => {
+                  const value = e.target.value.replace(/\D/g, '').slice(0, 6);
+                  setStartingTag(value);
+                  setError('');
+                }}
+                maxLength={6}
+                className="w-full px-4 py-4 text-2xl text-center font-mono tracking-widest border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            )}
 
             {error && (
               <p className="text-red-500 text-sm mt-2 text-center">{error}</p>
@@ -212,10 +289,10 @@ export default function StartSession() {
           <button
             type="button"
             onClick={handleStartSession}
-            disabled={!startingTag}
+            disabled={!startingTag || loadingTags}
             className="w-full py-4 bg-blue-700 text-white text-lg font-semibold rounded-xl hover:bg-blue-800 active:bg-blue-900 cursor-pointer disabled:bg-gray-300 disabled:cursor-not-allowed"
           >
-            Start Session
+            {continuingFrom ? 'Continue Session' : 'Start Session'}
           </button>
         </div>
       </div>

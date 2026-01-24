@@ -48,8 +48,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(400).json({ error: 'Customer name and phone required' });
       }
 
-      if (!paymentMethod || !['upi', 'cash'].includes(paymentMethod)) {
-        return res.status(400).json({ error: 'Valid payment method required (upi or cash)' });
+      if (!paymentMethod || !['upi', 'cash', 'split'].includes(paymentMethod)) {
+        return res.status(400).json({ error: 'Valid payment method required (upi, cash, or split)' });
       }
 
       const totalTickets = (menTicket || 0) + (womenTicket || 0) + (childTicket || 0);
@@ -68,7 +68,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         tagNumbers: tagNumbers || null,
         subtotal,
         totalDue,
-        paymentMethod: paymentMethod as 'upi' | 'cash',
+        paymentMethod: paymentMethod as 'upi' | 'cash' | 'split',
         cashierId: currentUser.id,
         cashierName: currentUser.name,
         isComplimentary: isComplimentary || false,

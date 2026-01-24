@@ -43,7 +43,7 @@ export const ticketTransactions = sqliteTable('ticket_transactions', {
   tagNumbers: text('tag_numbers'), // Comma-separated 6-digit tag numbers (one per person)
   subtotal: real('subtotal').notNull(),
   totalDue: real('total_due').notNull(), // Same as subtotal (no advance)
-  paymentMethod: text('payment_method', { enum: ['upi', 'cash'] }).notNull(),
+  paymentMethod: text('payment_method', { enum: ['upi', 'cash', 'split'] }).notNull(),
   cashierId: text('cashier_id').references(() => users.id).notNull(),
   cashierName: text('cashier_name').notNull(),
   createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),

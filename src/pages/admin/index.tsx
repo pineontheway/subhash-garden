@@ -54,7 +54,10 @@ type TicketTransaction = {
   childTicket: number;
   subtotal: number;
   totalDue: number;
-  paymentMethod: 'upi' | 'cash';
+  paymentMethod: 'upi' | 'cash' | 'split';
+  upiAmount: number | null;
+  cashAmount: number | null;
+  tagNumbers: string | null;
   cashierId: string;
   cashierName: string;
   createdAt: string;
@@ -85,7 +88,7 @@ export default function AdminDashboard() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [ticketTransactions, setTicketTransactions] = useState<TicketTransaction[]>([]);
   const [inventoryTransactions, setInventoryTransactions] = useState<Transaction[]>([]);
-  const [reportFilter, setReportFilter] = useState<'all' | 'tickets' | 'clothes'>('all');
+  const [reportFilter, setReportFilter] = useState<'all' | 'tickets' | 'clothes'>('tickets');
   const [loading, setLoading] = useState(true);
   const [editingPrice, setEditingPrice] = useState<string | null>(null);
   const [newPrice, setNewPrice] = useState<number>(0);
@@ -300,6 +303,97 @@ export default function AdminDashboard() {
 
   // Combined totals
   const combinedRevenue = filteredTotal + ticketTotal;
+
+  // Calculate ticket cashier settlements
+  const ticketSettlements = (() => {
+    const settlementMap: Record<string, {
+      cashierId: string;
+      cashierName: string;
+      transactions: number;
+      totalRevenue: number;
+      cashAmount: number;
+      upiAmount: number;
+      cashToReturn: number;
+    }> = {};
+
+    ticketTransactions.forEach(t => {
+      if (!settlementMap[t.cashierId]) {
+        settlementMap[t.cashierId] = {
+          cashierId: t.cashierId,
+          cashierName: t.cashierName,
+          transactions: 0,
+          totalRevenue: 0,
+          cashAmount: 0,
+          upiAmount: 0,
+          cashToReturn: 0,
+        };
+      }
+
+      const settlement = settlementMap[t.cashierId];
+      settlement.transactions += 1;
+      settlement.totalRevenue += t.totalDue;
+
+      if (t.paymentMethod === 'cash') {
+        settlement.cashAmount += t.totalDue;
+        settlement.cashToReturn += t.totalDue;
+      } else if (t.paymentMethod === 'upi') {
+        settlement.upiAmount += t.totalDue;
+      } else if (t.paymentMethod === 'split') {
+        settlement.upiAmount += t.upiAmount || 0;
+        settlement.cashAmount += t.cashAmount || 0;
+        settlement.cashToReturn += t.cashAmount || 0;
+      }
+    });
+
+    return Object.values(settlementMap);
+  })();
+
+  // Calculate clothes cashier settlements
+  const clothesSettlements = (() => {
+    const settlementMap: Record<string, {
+      cashierId: string;
+      cashierName: string;
+      transactions: number;
+      totalRevenue: number;
+      advanceCollected: number;
+      advanceReturned: number;
+      deductions: number;
+      netCash: number;
+    }> = {};
+
+    transactions.forEach(t => {
+      if (!settlementMap[t.cashierId]) {
+        settlementMap[t.cashierId] = {
+          cashierId: t.cashierId,
+          cashierName: t.cashierName,
+          transactions: 0,
+          totalRevenue: 0,
+          advanceCollected: 0,
+          advanceReturned: 0,
+          deductions: 0,
+          netCash: 0,
+        };
+      }
+
+      const settlement = settlementMap[t.cashierId];
+      settlement.transactions += 1;
+      settlement.totalRevenue += t.subtotal;
+      settlement.advanceCollected += t.advance;
+
+      // If this cashier returned the advance
+      if (t.status === 'advance_returned' && t.advanceReturnedByName === t.cashierName) {
+        settlement.advanceReturned += t.actualAmountReturned ?? t.advance;
+        settlement.deductions += t.totalDeduction ?? 0;
+      }
+    });
+
+    // Calculate net cash for each cashier
+    Object.values(settlementMap).forEach(s => {
+      s.netCash = s.advanceCollected - s.advanceReturned + s.deductions;
+    });
+
+    return Object.values(settlementMap);
+  })();
 
   // Calculate damage analytics
   const damageAnalytics = (() => {
@@ -846,316 +940,463 @@ export default function AdminDashboard() {
                     </div>
                   </div>
 
-                  {/* Counter Type Filter */}
-                  <div className="flex gap-2 mb-4">
-                    <button
-                      type="button"
-                      onClick={() => setReportFilter('all')}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium cursor-pointer ${
-                        reportFilter === 'all' ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }`}
-                    >
-                      All
-                    </button>
+                  {/* Combined Total Revenue - Always shown */}
+                  <div className="bg-purple-50 rounded-xl p-4">
+                    <h3 className="font-medium text-purple-800 mb-3">{getDateLabel()} - Total Revenue</h3>
+                    <div className="text-center">
+                      <p className="text-3xl font-bold text-purple-600">₹{combinedRevenue.toFixed(2)}</p>
+                      <p className="text-sm text-purple-700 mt-1">{transactions.length + ticketTransactions.length} total transactions</p>
+                    </div>
+                  </div>
+
+                  {/* Tickets / Clothes Tabs */}
+                  <div className="flex border-b border-gray-200">
                     <button
                       type="button"
                       onClick={() => setReportFilter('tickets')}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium cursor-pointer ${
-                        reportFilter === 'tickets' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      className={`flex-1 py-3 text-center font-medium cursor-pointer ${
+                        reportFilter === 'tickets'
+                          ? 'text-blue-600 border-b-2 border-blue-600'
+                          : 'text-gray-500 hover:text-gray-700'
                       }`}
                     >
-                      Tickets
+                      <span className="flex items-center justify-center gap-2">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
+                        </svg>
+                        Tickets
+                      </span>
                     </button>
                     <button
                       type="button"
                       onClick={() => setReportFilter('clothes')}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium cursor-pointer ${
-                        reportFilter === 'clothes' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      className={`flex-1 py-3 text-center font-medium cursor-pointer ${
+                        reportFilter === 'clothes'
+                          ? 'text-green-600 border-b-2 border-green-600'
+                          : 'text-gray-500 hover:text-gray-700'
                       }`}
                     >
-                      Clothes
-                    </button>
-                  </div>
-
-                  {/* Combined Total */}
-                  {reportFilter === 'all' && (
-                    <div className="bg-purple-50 rounded-xl p-4 mb-4">
-                      <h3 className="font-medium text-purple-800 mb-3">{getDateLabel()} - Total Revenue</h3>
-                      <div className="text-center">
-                        <p className="text-3xl font-bold text-purple-600">₹{combinedRevenue.toFixed(2)}</p>
-                        <p className="text-sm text-purple-700 mt-1">{transactions.length + ticketTransactions.length} total transactions</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Ticket Counter Summary */}
-                  {(reportFilter === 'all' || reportFilter === 'tickets') && (
-                    <div className="bg-blue-50 rounded-xl p-4 mb-4">
-                      <h3 className="font-medium text-blue-800 mb-3 flex items-center gap-2">
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
-                        </svg>
-                        Ticket Counter
-                      </h3>
-                      <div className="grid grid-cols-2 gap-4 mb-4">
-                        <div className="text-center">
-                          <p className="text-2xl font-bold text-blue-600">{ticketTransactions.length}</p>
-                          <p className="text-sm text-blue-700">Transactions</p>
-                        </div>
-                        <div className="text-center">
-                          <p className="text-2xl font-bold text-blue-600">₹{ticketTotal.toFixed(2)}</p>
-                          <p className="text-sm text-blue-700">Revenue</p>
-                        </div>
-                      </div>
-                      <div className="border-t border-blue-200 pt-3">
-                        <h4 className="text-sm font-medium text-blue-800 mb-2">Ticket Breakdown</h4>
-                        <div className="grid grid-cols-4 gap-2 text-center">
-                          <div className="bg-white/50 rounded-lg p-2">
-                            <p className="text-lg font-bold text-blue-700">{ticketMenCount}</p>
-                            <p className="text-xs text-blue-800">Men</p>
-                          </div>
-                          <div className="bg-white/50 rounded-lg p-2">
-                            <p className="text-lg font-bold text-blue-700">{ticketWomenCount}</p>
-                            <p className="text-xs text-blue-800">Women</p>
-                          </div>
-                          <div className="bg-white/50 rounded-lg p-2">
-                            <p className="text-lg font-bold text-blue-700">{ticketChildCount}</p>
-                            <p className="text-xs text-blue-800">Child</p>
-                          </div>
-                          <div className="bg-white/50 rounded-lg p-2">
-                            <p className="text-lg font-bold text-purple-600">{ticketVipCount}</p>
-                            <p className="text-xs text-purple-700">VIP</p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Clothes Counter Summary */}
-                  {(reportFilter === 'all' || reportFilter === 'clothes') && (
-                    <div className="bg-green-50 rounded-xl p-4">
-                      <h3 className="font-medium text-green-800 mb-3 flex items-center gap-2">
+                      <span className="flex items-center justify-center gap-2">
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                         </svg>
-                        Clothes Counter
-                      </h3>
-                      <div className="grid grid-cols-2 gap-4 mb-4">
-                        <div className="text-center">
-                          <p className="text-2xl font-bold text-green-600">{transactions.length}</p>
-                          <p className="text-sm text-green-700">Transactions</p>
-                        </div>
-                        <div className="text-center">
-                          <p className="text-2xl font-bold text-green-600">₹{filteredTotal.toFixed(2)}</p>
-                          <p className="text-sm text-green-700">Revenue</p>
-                        </div>
-                      </div>
-                      <div className="border-t border-green-200 pt-3">
-                        <h4 className="text-sm font-medium text-green-800 mb-2">Advance Tracking</h4>
-                        <div className="grid grid-cols-3 gap-2 text-center">
-                          <div className="bg-white/50 rounded-lg p-2">
-                            <p className="text-lg font-bold text-green-700">₹{filteredAdvanceCollected.toFixed(0)}</p>
-                            <p className="text-xs text-green-800">Collected</p>
-                          </div>
-                          <div className="bg-white/50 rounded-lg p-2">
-                            <p className="text-lg font-bold text-orange-600">₹{filteredAdvanceReturned.toFixed(0)}</p>
-                            <p className="text-xs text-orange-700">Returned</p>
-                          </div>
-                          <div className="bg-white/50 rounded-lg p-2">
-                            <p className="text-lg font-bold text-purple-700">₹{filteredActiveAdvance.toFixed(0)}</p>
-                            <p className="text-xs text-purple-800">Pending</p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Damage Analytics */}
-                  {(damageAnalytics.totalDamagedCount > 0 || damageAnalytics.totalLostCount > 0) && (
-                    <div className="bg-red-50 rounded-xl p-4">
-                      <h3 className="font-medium text-red-800 mb-3 flex items-center gap-2">
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                        </svg>
-                        Damage & Loss Report
-                      </h3>
-                      <div className="grid grid-cols-3 gap-2 text-center mb-4">
-                        <div className="bg-white/50 rounded-lg p-2">
-                          <p className="text-lg font-bold text-red-700">₹{damageAnalytics.totalDeductions.toFixed(0)}</p>
-                          <p className="text-xs text-red-800">Total Deductions</p>
-                        </div>
-                        <div className="bg-white/50 rounded-lg p-2">
-                          <p className="text-lg font-bold text-orange-600">{damageAnalytics.totalDamagedCount}</p>
-                          <p className="text-xs text-orange-700">Items Damaged</p>
-                        </div>
-                        <div className="bg-white/50 rounded-lg p-2">
-                          <p className="text-lg font-bold text-gray-700">{damageAnalytics.totalLostCount}</p>
-                          <p className="text-xs text-gray-600">Items Lost</p>
-                        </div>
-                      </div>
-
-                      {/* Damage by item type */}
-                      <div className="bg-white/50 rounded-lg p-3 mb-3">
-                        <p className="text-xs font-medium text-red-800 mb-2">Breakdown by Item Type</p>
-                        <div className="grid grid-cols-2 gap-2 text-xs">
-                          {Object.entries(damageAnalytics.damagedItems).map(([type, count]) => {
-                            const lostCount = damageAnalytics.lostItems[type as keyof typeof damageAnalytics.lostItems];
-                            if (count === 0 && lostCount === 0) return null;
-                            const labelMap: Record<string, string> = {
-                              maleCostume: 'Male Costume',
-                              femaleCostume: 'Female Costume',
-                              kidsCostume: 'Kids Costume',
-                              tube: 'Tube',
-                              locker: 'Locker',
-                            };
-                            return (
-                              <div key={type} className="flex justify-between bg-white rounded px-2 py-1">
-                                <span className="text-gray-700">{labelMap[type]}</span>
-                                <span>
-                                  {count > 0 && <span className="text-orange-600">{count} dmg</span>}
-                                  {count > 0 && lostCount > 0 && <span className="text-gray-400"> / </span>}
-                                  {lostCount > 0 && <span className="text-gray-600">{lostCount} lost</span>}
-                                </span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      {/* Recent damage records */}
-                      {damageAnalytics.damageRecords.length > 0 && (
-                        <div>
-                          <p className="text-xs font-medium text-red-800 mb-2">Recent Damage Records</p>
-                          <div className="space-y-2 max-h-48 overflow-y-auto">
-                            {damageAnalytics.damageRecords.slice(0, 10).map((record, i) => (
-                              <div key={i} className="bg-white rounded-lg p-2 text-xs">
-                                <div className="flex justify-between items-start mb-1">
-                                  <span className="font-medium text-gray-800">{record.customerName}</span>
-                                  <span className="text-red-600 font-medium">-₹{record.totalDeduction.toFixed(0)}</span>
-                                </div>
-                                <div className="text-gray-500">
-                                  {new Date(record.date + '+05:30').toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' })}
-                                </div>
-                                {record.notes && (
-                                  <div className="text-gray-600 italic mt-1">"{record.notes}"</div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Status Filter */}
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setStatusFilter('all')}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium cursor-pointer ${
-                        statusFilter === 'all'
-                          ? 'bg-gray-800 text-white'
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }`}
-                    >
-                      All
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setStatusFilter('active')}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium cursor-pointer ${
-                        statusFilter === 'active'
-                          ? 'bg-purple-600 text-white'
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }`}
-                    >
-                      Active
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setStatusFilter('advance_returned')}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium cursor-pointer ${
-                        statusFilter === 'advance_returned'
-                          ? 'bg-orange-600 text-white'
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }`}
-                    >
-                      Returned
+                        Clothes
+                      </span>
                     </button>
                   </div>
 
-                  {/* Recent Transactions */}
-                  <h3 className="font-medium text-gray-700 mt-6">Recent Transactions</h3>
-                  {transactions.length === 0 ? (
-                    <p className="text-gray-500 text-center py-10">No transactions found</p>
-                  ) : (
-                    <div className="space-y-3">
-                      {transactions.slice(0, 20).map(transaction => (
-                        <div key={transaction.id} className={`bg-white rounded-xl p-4 shadow-[0_2px_10px_rgba(0,0,0,0.08)] ${transaction.isComplimentary ? 'border-l-4 border-purple-400' : ''}`}>
-                          <div className="flex justify-between items-start mb-2">
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <p className="font-medium text-gray-800">{transaction.customerName}</p>
-                                {transaction.isComplimentary && (
-                                  <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full font-medium">VIP</span>
-                                )}
-                                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                                  transaction.status === 'active'
-                                    ? 'bg-blue-100 text-blue-700'
-                                    : 'bg-orange-100 text-orange-700'
-                                }`}>
-                                  {transaction.status === 'active' ? 'Active' : 'Returned'}
-                                </span>
-                              </div>
-                              <p className="text-sm text-gray-500">+91 {transaction.customerPhone}</p>
+                  {/* TICKETS TAB CONTENT */}
+                  {reportFilter === 'tickets' && (
+                    <>
+                      {/* Ticket Counter Summary */}
+                      <div className="bg-blue-50 rounded-xl p-4">
+                        <h3 className="font-medium text-blue-800 mb-3">Ticket Counter Stats</h3>
+                        <div className="grid grid-cols-2 gap-4 mb-4">
+                          <div className="text-center">
+                            <p className="text-2xl font-bold text-blue-600">{ticketTransactions.length}</p>
+                            <p className="text-sm text-blue-700">Transactions</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-2xl font-bold text-blue-600">₹{ticketTotal.toFixed(2)}</p>
+                            <p className="text-sm text-blue-700">Revenue</p>
+                          </div>
+                        </div>
+                        <div className="border-t border-blue-200 pt-3">
+                          <h4 className="text-sm font-medium text-blue-800 mb-2">Ticket Breakdown</h4>
+                          <div className="grid grid-cols-4 gap-2 text-center">
+                            <div className="bg-white/50 rounded-lg p-2">
+                              <p className="text-lg font-bold text-blue-700">{ticketMenCount}</p>
+                              <p className="text-xs text-blue-800">Men</p>
                             </div>
-                            <div className="text-right">
-                              {transaction.isComplimentary ? (
-                                <>
-                                  <p className="font-semibold text-purple-600">
-                                    {transaction.advance > 0 ? `₹${transaction.advance.toFixed(2)}` : '₹0.00'}
-                                  </p>
-                                  <p className="text-xs text-purple-400">
-                                    {transaction.advance > 0 ? 'VIP Advance' : 'Complimentary'}
-                                  </p>
-                                </>
-                              ) : (
-                                <>
-                                  <p className="font-semibold text-green-600">
-                                    ₹{transaction.status === 'advance_returned'
-                                      ? (transaction.subtotal + (transaction.totalDeduction ?? 0)).toFixed(2)
-                                      : transaction.totalDue.toFixed(2)}
+                            <div className="bg-white/50 rounded-lg p-2">
+                              <p className="text-lg font-bold text-blue-700">{ticketWomenCount}</p>
+                              <p className="text-xs text-blue-800">Women</p>
+                            </div>
+                            <div className="bg-white/50 rounded-lg p-2">
+                              <p className="text-lg font-bold text-blue-700">{ticketChildCount}</p>
+                              <p className="text-xs text-blue-800">Child</p>
+                            </div>
+                            <div className="bg-white/50 rounded-lg p-2">
+                              <p className="text-lg font-bold text-purple-600">{ticketVipCount}</p>
+                              <p className="text-xs text-purple-700">VIP</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Ticket Cashier Settlements */}
+                      <div className="bg-orange-50 rounded-xl p-4">
+                        <h3 className="font-medium text-orange-800 mb-3 flex items-center gap-2">
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                          </svg>
+                          Cashier Settlements
+                        </h3>
+                        {ticketSettlements.length === 0 ? (
+                          <p className="text-gray-500 text-center py-4">No settlements for this period</p>
+                        ) : (
+                          <div className="space-y-3">
+                            {ticketSettlements.map(settlement => (
+                              <div key={settlement.cashierId} className="bg-white rounded-lg p-3">
+                                <div className="flex justify-between items-start mb-2">
+                                  <div>
+                                    <p className="font-medium text-gray-800">{settlement.cashierName}</p>
+                                    <p className="text-xs text-gray-500">{settlement.transactions} transactions</p>
+                                  </div>
+                                  <div className="text-right">
+                                    <p className="text-lg font-bold text-orange-600">₹{settlement.cashToReturn.toFixed(0)}</p>
+                                    <p className="text-xs text-orange-700">Cash to Return</p>
+                                  </div>
+                                </div>
+                                <div className="grid grid-cols-3 gap-2 text-xs pt-2 border-t border-gray-100">
+                                  <div className="text-center">
+                                    <p className="font-medium text-gray-700">₹{settlement.totalRevenue.toFixed(0)}</p>
+                                    <p className="text-gray-500">Total</p>
+                                  </div>
+                                  <div className="text-center">
+                                    <p className="font-medium text-green-600">₹{settlement.cashAmount.toFixed(0)}</p>
+                                    <p className="text-gray-500">Cash</p>
+                                  </div>
+                                  <div className="text-center">
+                                    <p className="font-medium text-blue-600">₹{settlement.upiAmount.toFixed(0)}</p>
+                                    <p className="text-gray-500">UPI</p>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
+
+                  {/* CLOTHES TAB CONTENT */}
+                  {reportFilter === 'clothes' && (
+                    <>
+                      {/* Clothes Counter Summary */}
+                      <div className="bg-green-50 rounded-xl p-4">
+                        <h3 className="font-medium text-green-800 mb-3">Clothes Counter Stats</h3>
+                        <div className="grid grid-cols-2 gap-4 mb-4">
+                          <div className="text-center">
+                            <p className="text-2xl font-bold text-green-600">{transactions.length}</p>
+                            <p className="text-sm text-green-700">Transactions</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-2xl font-bold text-green-600">₹{filteredTotal.toFixed(2)}</p>
+                            <p className="text-sm text-green-700">Revenue</p>
+                          </div>
+                        </div>
+                        <div className="border-t border-green-200 pt-3">
+                          <h4 className="text-sm font-medium text-green-800 mb-2">Advance Tracking</h4>
+                          <div className="grid grid-cols-3 gap-2 text-center">
+                            <div className="bg-white/50 rounded-lg p-2">
+                              <p className="text-lg font-bold text-green-700">₹{filteredAdvanceCollected.toFixed(0)}</p>
+                              <p className="text-xs text-green-800">Collected</p>
+                            </div>
+                            <div className="bg-white/50 rounded-lg p-2">
+                              <p className="text-lg font-bold text-orange-600">₹{filteredAdvanceReturned.toFixed(0)}</p>
+                              <p className="text-xs text-orange-700">Returned</p>
+                            </div>
+                            <div className="bg-white/50 rounded-lg p-2">
+                              <p className="text-lg font-bold text-purple-700">₹{filteredActiveAdvance.toFixed(0)}</p>
+                              <p className="text-xs text-purple-800">Pending</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Clothes Cashier Settlements */}
+                      <div className="bg-orange-50 rounded-xl p-4">
+                        <h3 className="font-medium text-orange-800 mb-3 flex items-center gap-2">
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                          </svg>
+                          Cashier Settlements
+                        </h3>
+                        {clothesSettlements.length === 0 ? (
+                          <p className="text-gray-500 text-center py-4">No settlements for this period</p>
+                        ) : (
+                          <div className="space-y-3">
+                            {clothesSettlements.map(settlement => (
+                              <div key={settlement.cashierId} className="bg-white rounded-lg p-3">
+                                <div className="flex justify-between items-start mb-2">
+                                  <div>
+                                    <p className="font-medium text-gray-800">{settlement.cashierName}</p>
+                                    <p className="text-xs text-gray-500">{settlement.transactions} transactions</p>
+                                  </div>
+                                  <div className="text-right">
+                                    <p className="text-lg font-bold text-orange-600">₹{settlement.netCash.toFixed(0)}</p>
+                                    <p className="text-xs text-orange-700">Net Cash</p>
+                                  </div>
+                                </div>
+                                <div className="grid grid-cols-4 gap-2 text-xs pt-2 border-t border-gray-100">
+                                  <div className="text-center">
+                                    <p className="font-medium text-green-600">₹{settlement.advanceCollected.toFixed(0)}</p>
+                                    <p className="text-gray-500">Collected</p>
+                                  </div>
+                                  <div className="text-center">
+                                    <p className="font-medium text-orange-600">₹{settlement.advanceReturned.toFixed(0)}</p>
+                                    <p className="text-gray-500">Returned</p>
+                                  </div>
+                                  <div className="text-center">
+                                    <p className="font-medium text-red-600">₹{settlement.deductions.toFixed(0)}</p>
+                                    <p className="text-gray-500">Deductions</p>
+                                  </div>
+                                  <div className="text-center">
+                                    <p className="font-medium text-gray-700">₹{settlement.totalRevenue.toFixed(0)}</p>
+                                    <p className="text-gray-500">Revenue</p>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Damage Analytics - Only for clothes */}
+                      {(damageAnalytics.totalDamagedCount > 0 || damageAnalytics.totalLostCount > 0) && (
+                        <div className="bg-red-50 rounded-xl p-4">
+                          <h3 className="font-medium text-red-800 mb-3 flex items-center gap-2">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
+                            Damage & Loss Report
+                          </h3>
+                          <div className="grid grid-cols-3 gap-2 text-center mb-4">
+                            <div className="bg-white/50 rounded-lg p-2">
+                              <p className="text-lg font-bold text-red-700">₹{damageAnalytics.totalDeductions.toFixed(0)}</p>
+                              <p className="text-xs text-red-800">Total Deductions</p>
+                            </div>
+                            <div className="bg-white/50 rounded-lg p-2">
+                              <p className="text-lg font-bold text-orange-600">{damageAnalytics.totalDamagedCount}</p>
+                              <p className="text-xs text-orange-700">Items Damaged</p>
+                            </div>
+                            <div className="bg-white/50 rounded-lg p-2">
+                              <p className="text-lg font-bold text-gray-700">{damageAnalytics.totalLostCount}</p>
+                              <p className="text-xs text-gray-600">Items Lost</p>
+                            </div>
+                          </div>
+
+                          {/* Damage by item type */}
+                          <div className="bg-white/50 rounded-lg p-3 mb-3">
+                            <p className="text-xs font-medium text-red-800 mb-2">Breakdown by Item Type</p>
+                            <div className="grid grid-cols-2 gap-2 text-xs">
+                              {Object.entries(damageAnalytics.damagedItems).map(([type, count]) => {
+                                const lostCount = damageAnalytics.lostItems[type as keyof typeof damageAnalytics.lostItems];
+                                if (count === 0 && lostCount === 0) return null;
+                                const labelMap: Record<string, string> = {
+                                  maleCostume: 'Male Costume',
+                                  femaleCostume: 'Female Costume',
+                                  kidsCostume: 'Kids Costume',
+                                  tube: 'Tube',
+                                  locker: 'Locker',
+                                };
+                                return (
+                                  <div key={type} className="flex justify-between bg-white rounded px-2 py-1">
+                                    <span className="text-gray-700">{labelMap[type]}</span>
+                                    <span>
+                                      {count > 0 && <span className="text-orange-600">{count} dmg</span>}
+                                      {count > 0 && lostCount > 0 && <span className="text-gray-400"> / </span>}
+                                      {lostCount > 0 && <span className="text-gray-600">{lostCount} lost</span>}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Status Filter for clothes transactions */}
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setStatusFilter('all')}
+                          className={`px-4 py-2 rounded-lg text-sm font-medium cursor-pointer ${
+                            statusFilter === 'all'
+                              ? 'bg-gray-800 text-white'
+                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                          }`}
+                        >
+                          All
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setStatusFilter('active')}
+                          className={`px-4 py-2 rounded-lg text-sm font-medium cursor-pointer ${
+                            statusFilter === 'active'
+                              ? 'bg-purple-600 text-white'
+                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                          }`}
+                        >
+                          Active
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setStatusFilter('advance_returned')}
+                          className={`px-4 py-2 rounded-lg text-sm font-medium cursor-pointer ${
+                            statusFilter === 'advance_returned'
+                              ? 'bg-orange-600 text-white'
+                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                          }`}
+                        >
+                          Returned
+                        </button>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Ticket Transactions List */}
+                  {reportFilter === 'tickets' && (
+                    <>
+                      <h3 className="font-medium text-blue-700 mt-6 flex items-center gap-2">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
+                        </svg>
+                        Ticket Transactions
+                      </h3>
+                      {ticketTransactions.length === 0 ? (
+                        <p className="text-gray-500 text-center py-10">No ticket transactions found</p>
+                      ) : (
+                        <div className="space-y-3">
+                          {ticketTransactions.slice(0, 20).map(transaction => (
+                            <div key={transaction.id} className={`bg-white rounded-xl p-4 shadow-[0_2px_10px_rgba(0,0,0,0.08)] border-l-4 ${transaction.isComplimentary ? 'border-purple-400' : 'border-blue-400'}`}>
+                              <div className="flex justify-between items-start mb-2">
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <p className="font-medium text-gray-800">{transaction.customerName}</p>
+                                    {transaction.isComplimentary && (
+                                      <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full font-medium">VIP</span>
+                                    )}
+                                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                                      transaction.paymentMethod === 'upi' ? 'bg-blue-100 text-blue-700' :
+                                      transaction.paymentMethod === 'split' ? 'bg-purple-100 text-purple-700' :
+                                      'bg-green-100 text-green-700'
+                                    }`}>
+                                      {transaction.paymentMethod === 'upi' ? 'UPI' :
+                                       transaction.paymentMethod === 'split' ? 'Split' : 'Cash'}
+                                    </span>
+                                  </div>
+                                  <p className="text-sm text-gray-500">+91 {transaction.customerPhone}</p>
+                                  {transaction.vehicleNumber && (
+                                    <p className="text-xs text-gray-400">{transaction.vehicleNumber}</p>
+                                  )}
+                                </div>
+                                <div className="text-right">
+                                  <p className="font-semibold text-blue-600">
+                                    {transaction.isComplimentary ? '₹0.00' : `₹${transaction.totalDue.toFixed(2)}`}
                                   </p>
                                   <p className="text-xs text-gray-500">
                                     {new Date(transaction.createdAt + '+05:30').toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' })}
                                   </p>
-                                </>
+                                </div>
+                              </div>
+                              <div className="flex justify-between items-center text-sm text-gray-500">
+                                <span>Cashier: {transaction.cashierName}</span>
+                                <div className="flex items-center gap-3">
+                                  <span className="text-xs">
+                                    M:{transaction.menTicket} W:{transaction.womenTicket} C:{transaction.childTicket}
+                                  </span>
+                                  {transaction.tagNumbers && (
+                                    <span className="text-xs text-blue-600 font-medium">
+                                      Tags: {transaction.tagNumbers}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              {transaction.paymentMethod === 'split' && transaction.upiAmount && transaction.cashAmount && (
+                                <div className="mt-2 pt-2 border-t border-gray-100 text-xs text-purple-600">
+                                  Split: UPI ₹{transaction.upiAmount} + Cash ₹{transaction.cashAmount}
+                                </div>
                               )}
                             </div>
-                          </div>
-                          <div className="flex justify-between items-center text-sm text-gray-500">
-                            <span>Cashier: {transaction.cashierName}</span>
-                            {transaction.isComplimentary ? (
-                              <span className="text-purple-500">
-                                {transaction.advance > 0 ? `Advance: ₹${transaction.advance.toFixed(2)}` : 'VIP - No payment'}
-                              </span>
-                            ) : (
-                              <span>Advance: ₹{transaction.advance.toFixed(2)}</span>
-                            )}
-                          </div>
-                          {transaction.status === 'advance_returned' && transaction.advanceReturnedByName && (
-                            <div className="mt-2 pt-2 border-t border-gray-100 text-xs text-orange-600">
-                              Returned by {transaction.advanceReturnedByName} on {new Date(transaction.advanceReturnedAt! + '+05:30').toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' })}
-                              {!transaction.isComplimentary && transaction.totalDeduction && transaction.totalDeduction > 0 && (
-                                <span className="ml-2 text-red-600 font-medium">
-                                  (Deduction: ₹{transaction.totalDeduction.toFixed(0)})
-                                </span>
-                              )}
-                            </div>
-                          )}
+                          ))}
                         </div>
-                      ))}
-                    </div>
+                      )}
+                    </>
+                  )}
+
+                  {/* Clothes Transactions List */}
+                  {reportFilter === 'clothes' && (
+                    <>
+                      <h3 className="font-medium text-green-700 mt-6 flex items-center gap-2">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                        Clothes Transactions
+                      </h3>
+                      {transactions.length === 0 ? (
+                        <p className="text-gray-500 text-center py-10">No clothes transactions found</p>
+                      ) : (
+                        <div className="space-y-3">
+                          {transactions.slice(0, 20).map(transaction => (
+                            <div key={transaction.id} className={`bg-white rounded-xl p-4 shadow-[0_2px_10px_rgba(0,0,0,0.08)] border-l-4 ${transaction.isComplimentary ? 'border-purple-400' : 'border-green-400'}`}>
+                              <div className="flex justify-between items-start mb-2">
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <p className="font-medium text-gray-800">{transaction.customerName}</p>
+                                    {transaction.isComplimentary && (
+                                      <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full font-medium">VIP</span>
+                                    )}
+                                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                                      transaction.status === 'active'
+                                        ? 'bg-blue-100 text-blue-700'
+                                        : 'bg-orange-100 text-orange-700'
+                                    }`}>
+                                      {transaction.status === 'active' ? 'Active' : 'Returned'}
+                                    </span>
+                                  </div>
+                                  <p className="text-sm text-gray-500">+91 {transaction.customerPhone}</p>
+                                </div>
+                                <div className="text-right">
+                                  {transaction.isComplimentary ? (
+                                    <>
+                                      <p className="font-semibold text-purple-600">
+                                        {transaction.advance > 0 ? `₹${transaction.advance.toFixed(2)}` : '₹0.00'}
+                                      </p>
+                                      <p className="text-xs text-purple-400">
+                                        {transaction.advance > 0 ? 'VIP Advance' : 'Complimentary'}
+                                      </p>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <p className="font-semibold text-green-600">
+                                        ₹{transaction.status === 'advance_returned'
+                                          ? (transaction.subtotal + (transaction.totalDeduction ?? 0)).toFixed(2)
+                                          : transaction.totalDue.toFixed(2)}
+                                      </p>
+                                      <p className="text-xs text-gray-500">
+                                        {new Date(transaction.createdAt + '+05:30').toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' })}
+                                      </p>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex justify-between items-center text-sm text-gray-500">
+                                <span>Cashier: {transaction.cashierName}</span>
+                                {transaction.isComplimentary ? (
+                                  <span className="text-purple-500">
+                                    {transaction.advance > 0 ? `Advance: ₹${transaction.advance.toFixed(2)}` : 'VIP - No payment'}
+                                  </span>
+                                ) : (
+                                  <span>Advance: ₹{transaction.advance.toFixed(2)}</span>
+                                )}
+                              </div>
+                              {transaction.status === 'advance_returned' && transaction.advanceReturnedByName && (
+                                <div className="mt-2 pt-2 border-t border-gray-100 text-xs text-orange-600">
+                                  Returned by {transaction.advanceReturnedByName} on {new Date(transaction.advanceReturnedAt! + '+05:30').toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' })}
+                                  {!transaction.isComplimentary && transaction.totalDeduction && transaction.totalDeduction > 0 && (
+                                    <span className="ml-2 text-red-600 font-medium">
+                                      (Deduction: ₹{transaction.totalDeduction.toFixed(0)})
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               )}
