@@ -34,7 +34,7 @@ export default function TicketCheckout() {
   const [showReceipt, setShowReceipt] = useState(false);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
   const [showQRModal, setShowQRModal] = useState(false);
-  const [upiSettings, setUpiSettings] = useState<{ upi_id?: string; business_name?: string }>({});
+  const [upiSettings, setUpiSettings] = useState<{ upi_id?: string; business_name?: string; tickets_upi_id?: string; tickets_business_name?: string }>({});
   const receiptRef = useRef<HTMLDivElement>(null);
   const [items, setItems] = useState({
     name: '',
@@ -157,10 +157,10 @@ export default function TicketCheckout() {
     });
   }
 
-  // Generate UPI URI for QR code
+  // Generate UPI URI for QR code (uses tickets-specific UPI settings)
   const generateUpiUri = (amount: number) => {
-    const pa = upiSettings.upi_id || '';
-    const pn = encodeURIComponent(upiSettings.business_name || 'Subhash Garden');
+    const pa = upiSettings.tickets_upi_id || upiSettings.upi_id || '';
+    const pn = encodeURIComponent(upiSettings.tickets_business_name || upiSettings.business_name || 'Subhash Garden');
     const am = amount.toFixed(2);
     const tn = encodeURIComponent(`Entry Ticket - ${items.name}`);
     return `upi://pay?pa=${pa}&pn=${pn}&am=${am}&cu=INR&tn=${tn}`;
@@ -190,13 +190,13 @@ export default function TicketCheckout() {
     if (paymentMethod === 'cash') {
       await saveTransaction('cash');
     } else if (paymentMethod === 'upi') {
-      if (upiSettings.upi_id && totalDue > 0) {
+      if ((upiSettings.tickets_upi_id || upiSettings.upi_id) && totalDue > 0) {
         setShowQRModal(true);
       } else {
         await saveTransaction('upi');
       }
     } else if (paymentMethod === 'split') {
-      if (splitUpi > 0 && upiSettings.upi_id) {
+      if (splitUpi > 0 && (upiSettings.tickets_upi_id || upiSettings.upi_id)) {
         setShowQRModal(true);
       } else {
         await saveTransaction('split');
@@ -598,7 +598,7 @@ export default function TicketCheckout() {
               <div className="mt-4 text-center">
                 <p className="text-xs text-gray-500 mb-1">Or pay manually to</p>
                 <p className="text-sm font-medium text-gray-800 bg-gray-100 px-3 py-2 rounded-lg inline-block">
-                  {upiSettings.upi_id}
+                  {upiSettings.tickets_upi_id || upiSettings.upi_id}
                 </p>
               </div>
             </div>

@@ -1623,20 +1623,20 @@ export default function AdminDashboard() {
                 <div className="space-y-4">
                   <h2 className="text-lg font-semibold text-gray-800">Business Settings</h2>
 
-                  {/* UPI Settings Card */}
+                  {/* Clothes Counter UPI Settings Card */}
                   <div className="bg-white rounded-xl p-5 shadow-[0_2px_10px_rgba(0,0,0,0.08)]">
                     <h3 className="font-medium text-gray-800 mb-4 flex items-center gap-2">
-                      <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
                       </svg>
-                      UPI Payment Settings
+                      Clothes Counter UPI
                     </h3>
                     <p className="text-sm text-gray-500 mb-4">
-                      Configure your UPI details for generating payment QR codes at checkout.
+                      UPI settings for costume rental payments at the clothes counter.
                     </p>
 
                     <div className="space-y-4">
-                      {/* UPI ID */}
+                      {/* Clothes UPI ID */}
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                           UPI ID (VPA)
@@ -1644,26 +1644,26 @@ export default function AdminDashboard() {
                         <div className="flex gap-2">
                           <input
                             type="text"
-                            value={settings.upi_id || ''}
-                            onChange={(e) => setSettings(prev => ({ ...prev, upi_id: e.target.value }))}
-                            placeholder="yourshop@upi"
-                            className="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500"
+                            value={settings.clothes_upi_id || ''}
+                            onChange={(e) => setSettings(prev => ({ ...prev, clothes_upi_id: e.target.value }))}
+                            placeholder="clothes@upi"
+                            className="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500"
                           />
                           <button
                             type="button"
-                            onClick={() => updateSetting('upi_id', settings.upi_id || '')}
+                            onClick={() => updateSetting('clothes_upi_id', settings.clothes_upi_id || '')}
                             disabled={savingSettings}
-                            className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 disabled:bg-gray-400 cursor-pointer"
+                            className="px-4 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 disabled:bg-gray-400 cursor-pointer"
                           >
                             {savingSettings ? 'Saving...' : 'Save'}
                           </button>
                         </div>
                         <p className="text-xs text-gray-400 mt-1">
-                          Example: subhashgarden@paytm, subhashgarden@ybl
+                          Example: subhashclothes@paytm, subhashclothes@ybl
                         </p>
                       </div>
 
-                      {/* Business Name */}
+                      {/* Clothes Business Name */}
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                           Business Name (for QR display)
@@ -1671,14 +1671,93 @@ export default function AdminDashboard() {
                         <div className="flex gap-2">
                           <input
                             type="text"
-                            value={settings.business_name || ''}
-                            onChange={(e) => setSettings(prev => ({ ...prev, business_name: e.target.value }))}
-                            placeholder="Subhash Garden"
+                            value={settings.clothes_business_name || ''}
+                            onChange={(e) => setSettings(prev => ({ ...prev, clothes_business_name: e.target.value }))}
+                            placeholder="Subhash Garden Clothes"
+                            className="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => updateSetting('clothes_business_name', settings.clothes_business_name || '')}
+                            disabled={savingSettings}
+                            className="px-4 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 disabled:bg-gray-400 cursor-pointer"
+                          >
+                            {savingSettings ? 'Saving...' : 'Save'}
+                          </button>
+                        </div>
+                        <p className="text-xs text-gray-400 mt-1">
+                          This name will appear when customers scan the QR code
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Clothes Preview */}
+                    {settings.clothes_upi_id && (
+                      <div className="mt-4 bg-purple-50 rounded-lg p-3 border border-purple-200">
+                        <h4 className="font-medium text-purple-800 text-sm mb-1">Preview</h4>
+                        <code className="text-xs text-purple-700 break-all">
+                          upi://pay?pa={settings.clothes_upi_id}&pn={encodeURIComponent(settings.clothes_business_name || 'Subhash Garden')}&am=100&cu=INR
+                        </code>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Tickets Counter UPI Settings Card */}
+                  <div className="bg-white rounded-xl p-5 shadow-[0_2px_10px_rgba(0,0,0,0.08)]">
+                    <h3 className="font-medium text-gray-800 mb-4 flex items-center gap-2">
+                      <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                      </svg>
+                      Tickets Counter UPI
+                    </h3>
+                    <p className="text-sm text-gray-500 mb-4">
+                      UPI settings for entry ticket payments at the ticket counter.
+                    </p>
+
+                    <div className="space-y-4">
+                      {/* Tickets UPI ID */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          UPI ID (VPA)
+                        </label>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={settings.tickets_upi_id || ''}
+                            onChange={(e) => setSettings(prev => ({ ...prev, tickets_upi_id: e.target.value }))}
+                            placeholder="tickets@upi"
                             className="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500"
                           />
                           <button
                             type="button"
-                            onClick={() => updateSetting('business_name', settings.business_name || '')}
+                            onClick={() => updateSetting('tickets_upi_id', settings.tickets_upi_id || '')}
+                            disabled={savingSettings}
+                            className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 disabled:bg-gray-400 cursor-pointer"
+                          >
+                            {savingSettings ? 'Saving...' : 'Save'}
+                          </button>
+                        </div>
+                        <p className="text-xs text-gray-400 mt-1">
+                          Example: subhashtickets@paytm, subhashtickets@ybl
+                        </p>
+                      </div>
+
+                      {/* Tickets Business Name */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Business Name (for QR display)
+                        </label>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={settings.tickets_business_name || ''}
+                            onChange={(e) => setSettings(prev => ({ ...prev, tickets_business_name: e.target.value }))}
+                            placeholder="Subhash Garden Tickets"
+                            className="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => updateSetting('tickets_business_name', settings.tickets_business_name || '')}
                             disabled={savingSettings}
                             className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 disabled:bg-gray-400 cursor-pointer"
                           >
@@ -1690,20 +1769,17 @@ export default function AdminDashboard() {
                         </p>
                       </div>
                     </div>
-                  </div>
 
-                  {/* Preview Card */}
-                  {settings.upi_id && (
-                    <div className="bg-green-50 rounded-xl p-4 border border-green-200">
-                      <h4 className="font-medium text-green-800 mb-2">UPI Link Preview</h4>
-                      <code className="text-xs text-green-700 break-all">
-                        upi://pay?pa={settings.upi_id}&pn={encodeURIComponent(settings.business_name || 'Subhash Garden')}&am=100&cu=INR
-                      </code>
-                      <p className="text-xs text-green-600 mt-2">
-                        This is how the UPI link will be generated (amount will be dynamic)
-                      </p>
-                    </div>
-                  )}
+                    {/* Tickets Preview */}
+                    {settings.tickets_upi_id && (
+                      <div className="mt-4 bg-green-50 rounded-lg p-3 border border-green-200">
+                        <h4 className="font-medium text-green-800 text-sm mb-1">Preview</h4>
+                        <code className="text-xs text-green-700 break-all">
+                          upi://pay?pa={settings.tickets_upi_id}&pn={encodeURIComponent(settings.tickets_business_name || 'Subhash Garden')}&am=100&cu=INR
+                        </code>
+                      </div>
+                    )}
+                  </div>
 
                   {/* Info Note */}
                   <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
@@ -1714,7 +1790,7 @@ export default function AdminDashboard() {
                       <div>
                         <p className="font-medium text-blue-800">How UPI QR works</p>
                         <p className="text-sm text-blue-700 mt-1">
-                          When a cashier clicks "Pay" at checkout, a QR code will be shown that customers can scan with any UPI app (GPay, PhonePe, Paytm, etc.). The payment amount will be pre-filled.
+                          When a cashier clicks "Pay" at checkout, a QR code will be shown that customers can scan with any UPI app (GPay, PhonePe, Paytm, etc.). The payment amount will be pre-filled. Each counter uses its own UPI configuration.
                         </p>
                       </div>
                     </div>
