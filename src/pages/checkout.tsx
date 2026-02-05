@@ -311,7 +311,64 @@ export default function Checkout() {
   };
 
   const handlePrint = () => {
-    window.print();
+    // Check if running in Android WebView with print support
+    if (typeof window !== 'undefined' && (window as any).Android?.print && receiptData) {
+      // Format receipt for thermal printer
+      const divider = '--------------------------------';
+      const lines: string[] = [];
+
+      lines.push('<center><big>Subhash Garden</big></center>');
+      lines.push('<center>Costume Rental</center>');
+      lines.push(divider);
+      lines.push('');
+      lines.push(`Date: ${receiptData.timestamp}`);
+      lines.push(`Receipt #: HC-${receiptData.id}${receiptData.isLinked ? ' (Linked)' : ''}`);
+      if (receiptData.isLinked && receiptData.parentReceiptId) {
+        lines.push(`Linked to: HC-${receiptData.parentReceiptId}`);
+      }
+      lines.push(`Cashier: ${receiptData.cashierName}`);
+      lines.push(divider);
+      lines.push('');
+      lines.push(`Customer: ${receiptData.customerName}`);
+      lines.push(`Phone: +91 ${receiptData.customerPhone}`);
+      lines.push(divider);
+      lines.push('');
+
+      // Line items
+      receiptData.lineItems.forEach(item => {
+        const itemLine = `${item.label} x${item.qty}`;
+        const priceLine = `Rs.${item.price.toFixed(2)}`;
+        lines.push(`${itemLine.padEnd(20)}${priceLine.padStart(12)}`);
+      });
+
+      lines.push(divider);
+
+      if (receiptData.isLinked) {
+        lines.push(`Parent Advance:     Rs.${receiptData.parentAdvance?.toFixed(2)}`);
+        lines.push(`Credit Used:       -Rs.${receiptData.subtotal.toFixed(2)}`);
+        lines.push(divider);
+        lines.push(`<b>REMAINING:      Rs.${receiptData.remainingAdvance?.toFixed(2)}</b>`);
+      } else {
+        lines.push(`Subtotal:           Rs.${receiptData.subtotal.toFixed(2)}`);
+        lines.push(`Advance Paid:       Rs.${receiptData.advance.toFixed(2)}`);
+        lines.push(divider);
+        lines.push(`<b>TOTAL:          Rs.${receiptData.totalDue.toFixed(2)}</b>`);
+      }
+
+      lines.push('');
+      lines.push(divider);
+      const status = receiptData.isLinked ? 'CREDIT APPLIED' : receiptData.isVIP ? 'VIP - COMPLIMENTARY' : 'PAYMENT RECEIVED';
+      lines.push(`<center><b>${status}</b></center>`);
+      lines.push(divider);
+      lines.push('');
+      lines.push('<center>Thank you for visiting!</center>');
+      lines.push('<center>Have a great swim!</center>');
+      lines.push('');
+
+      (window as any).Android.print(lines.join('\n'));
+    } else {
+      window.print();
+    }
   };
 
   const handleDone = () => {

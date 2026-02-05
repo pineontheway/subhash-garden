@@ -267,7 +267,59 @@ export default function TicketCheckout() {
   };
 
   const handlePrint = () => {
-    window.print();
+    // Check if running in Android WebView with print support
+    if (typeof window !== 'undefined' && (window as any).Android?.print && receiptData) {
+      // Format receipt for thermal printer
+      const divider = '--------------------------------';
+      const lines: string[] = [];
+
+      lines.push('<center><big>Subhash Garden</big></center>');
+      lines.push('<center>Entry Ticket</center>');
+      lines.push(divider);
+      lines.push('');
+      lines.push(`Date: ${receiptData.timestamp}`);
+      lines.push(`Receipt #: TKT-${receiptData.id}`);
+      lines.push(`Cashier: ${receiptData.cashierName}`);
+      lines.push(divider);
+      lines.push('');
+      lines.push(`Customer: ${receiptData.customerName}`);
+      lines.push(`Phone: +91 ${receiptData.customerPhone}`);
+      if (receiptData.vehicleNumber) {
+        lines.push(`Vehicle: ${receiptData.vehicleNumber}`);
+      }
+      if (receiptData.tagNumbers && receiptData.tagNumbers.length > 0) {
+        lines.push(`Tags: ${receiptData.tagNumbers.join(', ')}`);
+      }
+      lines.push(divider);
+      lines.push('');
+
+      // Line items
+      receiptData.lineItems.forEach(item => {
+        const itemLine = `${item.label} x${item.qty}`;
+        const priceLine = `Rs.${item.price.toFixed(2)}`;
+        lines.push(`${itemLine.padEnd(20)}${priceLine.padStart(12)}`);
+      });
+
+      lines.push(divider);
+      const totalText = receiptData.isVIP ? 'FREE (VIP)' : `Rs.${receiptData.total.toFixed(2)}`;
+      lines.push(`<b>TOTAL PAID:     ${totalText}</b>`);
+      lines.push('');
+      lines.push(divider);
+      const status = receiptData.isVIP ? 'VIP - COMPLIMENTARY' : 'PAYMENT RECEIVED';
+      lines.push(`<center><b>${status}</b></center>`);
+      if (!receiptData.isVIP) {
+        lines.push(`<center>Paid via ${receiptData.paymentMethod.toUpperCase()}</center>`);
+      }
+      lines.push(divider);
+      lines.push('');
+      lines.push('<center>Thank you for visiting!</center>');
+      lines.push('<center>Have a great time!</center>');
+      lines.push('');
+
+      (window as any).Android.print(lines.join('\n'));
+    } else {
+      window.print();
+    }
   };
 
   const handleDone = () => {
