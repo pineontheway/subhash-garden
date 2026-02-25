@@ -317,7 +317,7 @@ export default function Checkout() {
       // Format receipt for 80mm thermal printer (48 chars per line)
       const W = 48;
       const divider = '-'.repeat(W);
-      const blackBar = '█'.repeat(W);
+      const blackBar = '='.repeat(W);
       const fmt = (label: string, value: string) => `${label}${value.padStart(W - label.length)}`;
       const lines: string[] = [];
 
