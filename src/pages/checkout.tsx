@@ -313,21 +313,24 @@ export default function Checkout() {
   const handlePrint = () => {
     // Check if running in Android WebView with print support
     if (typeof window !== 'undefined' && (window as any).Android?.print && receiptData) {
-      // Format receipt for thermal printer
-      const divider = '--------------------------------';
+      // Format receipt for 80mm thermal printer (48 chars per line)
+      const W = 48;
+      const divider = '-'.repeat(W);
+      const blackBar = '█'.repeat(W);
+      const fmt = (label: string, value: string) => `${label}${value.padStart(W - label.length)}`;
       const lines: string[] = [];
 
       lines.push('<center><big>Subhash Garden</big></center>');
       lines.push('<center>Costume Rental</center>');
-      lines.push(divider);
       lines.push('');
-      lines.push(`Date: ${receiptData.timestamp}`);
+      lines.push(blackBar);
+      lines.push(`Cashier: ${receiptData.cashierName}`);
       lines.push(`Receipt #: HC-${receiptData.id}${receiptData.isLinked ? ' (Linked)' : ''}`);
       if (receiptData.isLinked && receiptData.parentReceiptId) {
         lines.push(`Linked to: HC-${receiptData.parentReceiptId}`);
       }
-      lines.push(`Cashier: ${receiptData.cashierName}`);
-      lines.push(divider);
+      lines.push(`Date: ${receiptData.timestamp}`);
+      lines.push(blackBar);
       lines.push('');
       lines.push(`Customer: ${receiptData.customerName}`);
       lines.push(`Phone: +91 ${receiptData.customerPhone}`);
@@ -338,21 +341,21 @@ export default function Checkout() {
       receiptData.lineItems.forEach(item => {
         const itemLine = `${item.label} x${item.qty}`;
         const priceLine = `Rs.${item.price.toFixed(2)}`;
-        lines.push(`${itemLine.padEnd(20)}${priceLine.padStart(12)}`);
+        lines.push(`${itemLine.padEnd(W - priceLine.length)}${priceLine}`);
       });
 
       lines.push(divider);
 
       if (receiptData.isLinked) {
-        lines.push(`Parent Advance:     Rs.${receiptData.parentAdvance?.toFixed(2)}`);
-        lines.push(`Credit Used:       -Rs.${receiptData.subtotal.toFixed(2)}`);
+        lines.push(fmt('Parent Advance:', `Rs.${receiptData.parentAdvance?.toFixed(2)}`));
+        lines.push(fmt('Credit Used:', `-Rs.${receiptData.subtotal.toFixed(2)}`));
         lines.push(divider);
-        lines.push(`<b>REMAINING:      Rs.${receiptData.remainingAdvance?.toFixed(2)}</b>`);
+        lines.push(`<b>${fmt('REMAINING:', `Rs.${receiptData.remainingAdvance?.toFixed(2)}`)}</b>`);
       } else {
-        lines.push(`Subtotal:           Rs.${receiptData.subtotal.toFixed(2)}`);
-        lines.push(`Advance Paid:       Rs.${receiptData.advance.toFixed(2)}`);
+        lines.push(fmt('Subtotal:', `Rs.${receiptData.subtotal.toFixed(2)}`));
+        lines.push(fmt('Advance Paid:', `Rs.${receiptData.advance.toFixed(2)}`));
         lines.push(divider);
-        lines.push(`<b>TOTAL:          Rs.${receiptData.totalDue.toFixed(2)}</b>`);
+        lines.push(`<b>${fmt('TOTAL:', `Rs.${receiptData.totalDue.toFixed(2)}`)}</b>`);
       }
 
       lines.push('');

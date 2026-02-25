@@ -82,7 +82,7 @@ type ReturnDetails = {
 export default function AdminDashboard() {
   const router = useRouter();
   const { data: session, status } = useSession();
-  const [activeTab, setActiveTab] = useState<'users' | 'prices' | 'reports' | 'inventory' | 'settings'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'prices' | 'reports' | 'inventory' | 'settings' | 'flows'>('users');
   const [users, setUsers] = useState<User[]>([]);
   const [prices, setPrices] = useState<Price[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -95,6 +95,7 @@ export default function AdminDashboard() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'advance_returned'>('all');
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [savingSettings, setSavingSettings] = useState(false);
+  const [savingFlows, setSavingFlows] = useState(false);
 
   // Date filter - default to today (using Indian timezone)
   const getTodayDate = () => {
@@ -206,7 +207,7 @@ export default function AdminDashboard() {
           const data = await res.json();
           setInventoryTransactions(data);
         }
-      } else if (activeTab === 'settings') {
+      } else if (activeTab === 'settings' || activeTab === 'flows') {
         const res = await fetch('/api/settings');
         if (res.ok) {
           const data = await res.json();
@@ -281,6 +282,24 @@ export default function AdminDashboard() {
       console.error('Error updating setting:', error);
     }
     setSavingSettings(false);
+  };
+
+  const toggleFlow = async (key: 'enable_clothes_flow' | 'enable_ticket_flow', currentValue: boolean) => {
+    setSavingFlows(true);
+    const newValue = (!currentValue).toString();
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key, value: newValue }),
+      });
+      if (res.ok) {
+        setSettings(prev => ({ ...prev, [key]: newValue }));
+      }
+    } catch (error) {
+      console.error('Error toggling flow:', error);
+    }
+    setSavingFlows(false);
   };
 
   // Calculate summary for filtered clothes transactions
@@ -687,6 +706,17 @@ export default function AdminDashboard() {
             }`}
           >
             Settings
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('flows')}
+            className={`flex-1 py-3 text-center font-medium cursor-pointer ${
+              activeTab === 'flows'
+                ? 'text-green-600 border-b-2 border-green-600'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Flows
           </button>
         </div>
 
@@ -1793,6 +1823,91 @@ export default function AdminDashboard() {
                           When a cashier clicks "Pay" at checkout, a QR code will be shown that customers can scan with any UPI app (GPay, PhonePe, Paytm, etc.). The payment amount will be pre-filled. Each counter uses its own UPI configuration.
                         </p>
                       </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Flows Tab */}
+              {activeTab === 'flows' && (
+                <div className="space-y-4">
+                  <h2 className="text-lg font-semibold text-gray-800">Flow Controls</h2>
+                  <p className="text-sm text-gray-500">Enable or disable each counter flow. Disabled flows will be greyed out on the counter selection screen.</p>
+
+                  {/* Ticket Counter Flow */}
+                  <div className="bg-white rounded-xl p-5 shadow-[0_2px_10px_rgba(0,0,0,0.08)]">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                          <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
+                          </svg>
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-800">Ticket Counter</p>
+                          <p className="text-sm text-gray-500">Entry ticket sales with tag numbers</p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={savingFlows}
+                        onClick={() => toggleFlow('enable_ticket_flow', settings.enable_ticket_flow !== 'false')}
+                        className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors cursor-pointer disabled:opacity-50 ${
+                          settings.enable_ticket_flow !== 'false' ? 'bg-blue-500' : 'bg-gray-300'
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                            settings.enable_ticket_flow !== 'false' ? 'translate-x-6' : 'translate-x-1'
+                          }`}
+                        />
+                      </button>
+                    </div>
+                    <p className={`mt-3 text-xs font-medium ${settings.enable_ticket_flow !== 'false' ? 'text-blue-600' : 'text-gray-400'}`}>
+                      {settings.enable_ticket_flow !== 'false' ? 'Enabled — Ticket counter is active' : 'Disabled — Ticket counter is hidden from cashiers'}
+                    </p>
+                  </div>
+
+                  {/* Clothes Counter Flow */}
+                  <div className="bg-white rounded-xl p-5 shadow-[0_2px_10px_rgba(0,0,0,0.08)]">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                          <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          </svg>
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-800">Clothes Counter</p>
+                          <p className="text-sm text-gray-500">Costume rentals with advance system</p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={savingFlows}
+                        onClick={() => toggleFlow('enable_clothes_flow', settings.enable_clothes_flow !== 'false')}
+                        className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors cursor-pointer disabled:opacity-50 ${
+                          settings.enable_clothes_flow !== 'false' ? 'bg-green-500' : 'bg-gray-300'
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                            settings.enable_clothes_flow !== 'false' ? 'translate-x-6' : 'translate-x-1'
+                          }`}
+                        />
+                      </button>
+                    </div>
+                    <p className={`mt-3 text-xs font-medium ${settings.enable_clothes_flow !== 'false' ? 'text-green-600' : 'text-gray-400'}`}>
+                      {settings.enable_clothes_flow !== 'false' ? 'Enabled — Clothes counter is active' : 'Disabled — Clothes counter is hidden from cashiers'}
+                    </p>
+                  </div>
+
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                    <div className="flex items-start gap-3">
+                      <svg className="w-5 h-5 text-amber-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <p className="text-sm text-amber-800">Disabling a flow hides it from cashiers on the counter selection screen. Admins can always access both flows.</p>
                     </div>
                   </div>
                 </div>

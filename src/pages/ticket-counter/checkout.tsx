@@ -269,18 +269,21 @@ export default function TicketCheckout() {
   const handlePrint = () => {
     // Check if running in Android WebView with print support
     if (typeof window !== 'undefined' && (window as any).Android?.print && receiptData) {
-      // Format receipt for thermal printer
-      const divider = '--------------------------------';
+      // Format receipt for 80mm thermal printer (48 chars per line)
+      const W = 48;
+      const divider = '-'.repeat(W);
+      const blackBar = '█'.repeat(W);
+      const fmt = (label: string, value: string) => `${label}${value.padStart(W - label.length)}`;
       const lines: string[] = [];
 
       lines.push('<center><big>Subhash Garden</big></center>');
       lines.push('<center>Entry Ticket</center>');
-      lines.push(divider);
       lines.push('');
-      lines.push(`Date: ${receiptData.timestamp}`);
-      lines.push(`Receipt #: TKT-${receiptData.id}`);
+      lines.push(blackBar);
       lines.push(`Cashier: ${receiptData.cashierName}`);
-      lines.push(divider);
+      lines.push(`Receipt #: TKT-${receiptData.id}`);
+      lines.push(`Date: ${receiptData.timestamp}`);
+      lines.push(blackBar);
       lines.push('');
       lines.push(`Customer: ${receiptData.customerName}`);
       lines.push(`Phone: +91 ${receiptData.customerPhone}`);
@@ -297,12 +300,12 @@ export default function TicketCheckout() {
       receiptData.lineItems.forEach(item => {
         const itemLine = `${item.label} x${item.qty}`;
         const priceLine = `Rs.${item.price.toFixed(2)}`;
-        lines.push(`${itemLine.padEnd(20)}${priceLine.padStart(12)}`);
+        lines.push(`${itemLine.padEnd(W - priceLine.length)}${priceLine}`);
       });
 
       lines.push(divider);
       const totalText = receiptData.isVIP ? 'FREE (VIP)' : `Rs.${receiptData.total.toFixed(2)}`;
-      lines.push(`<b>TOTAL PAID:     ${totalText}</b>`);
+      lines.push(`<b>${fmt('TOTAL PAID:', totalText)}</b>`);
       lines.push('');
       lines.push(divider);
       const status = receiptData.isVIP ? 'VIP - COMPLIMENTARY' : 'PAYMENT RECEIVED';
