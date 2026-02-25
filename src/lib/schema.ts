@@ -7,6 +7,7 @@ export const users = sqliteTable('users', {
   email: text('email').notNull().unique(),
   name: text('name').notNull(),
   image: text('image'),
+  passwordHash: text('password_hash'), // bcrypt hash, nullable during migration
   role: text('role', { enum: ['admin', 'cashier'] }), // NULL means no access
   createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`).notNull(),

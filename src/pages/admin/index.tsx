@@ -97,6 +97,19 @@ export default function AdminDashboard() {
   const [savingSettings, setSavingSettings] = useState(false);
   const [savingFlows, setSavingFlows] = useState(false);
 
+  // Create user form state
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserName, setNewUserName] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('');
+  const [newUserRole, setNewUserRole] = useState<'admin' | 'cashier'>('cashier');
+  const [creatingUser, setCreatingUser] = useState(false);
+  const [createUserError, setCreateUserError] = useState('');
+
+  // Reset password state
+  const [resetPasswordUserId, setResetPasswordUserId] = useState<string | null>(null);
+  const [resetPasswordValue, setResetPasswordValue] = useState('');
+  const [resettingPassword, setResettingPassword] = useState(false);
+
   // Date filter - default to today (using Indian timezone)
   const getTodayDate = () => {
     const options: Intl.DateTimeFormatOptions = {
@@ -249,6 +262,61 @@ export default function AdminDashboard() {
     } catch (error) {
       console.error('Error removing user role:', error);
     }
+  };
+
+  const createUser = async () => {
+    if (!newUserEmail || !newUserName || !newUserPassword) {
+      setCreateUserError('All fields are required');
+      return;
+    }
+    setCreatingUser(true);
+    setCreateUserError('');
+    try {
+      const res = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: newUserEmail,
+          name: newUserName,
+          password: newUserPassword,
+          role: newUserRole,
+        }),
+      });
+      if (res.ok) {
+        setNewUserEmail('');
+        setNewUserName('');
+        setNewUserPassword('');
+        setNewUserRole('cashier');
+        fetchData();
+      } else {
+        const data = await res.json();
+        setCreateUserError(data.error || 'Failed to create user');
+      }
+    } catch (error) {
+      console.error('Error creating user:', error);
+      setCreateUserError('Failed to create user');
+    }
+    setCreatingUser(false);
+  };
+
+  const resetPassword = async (userId: string) => {
+    if (!resetPasswordValue) return;
+    setResettingPassword(true);
+    try {
+      const res = await fetch('/api/users', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: userId, password: resetPasswordValue }),
+      });
+      if (res.ok) {
+        setResetPasswordUserId(null);
+        setResetPasswordValue('');
+        alert('Password reset successfully');
+      }
+    } catch (error) {
+      console.error('Error resetting password:', error);
+    }
+    setResettingPassword(false);
   };
 
   const updatePrice = async (priceId: string) => {
@@ -730,41 +798,128 @@ export default function AdminDashboard() {
               {activeTab === 'users' && (
                 <div className="space-y-4">
                   <h2 className="text-lg font-semibold text-gray-800">User Management</h2>
+
+                  {/* Create User Form */}
+                  <div className="bg-blue-50 rounded-xl p-4 space-y-3">
+                    <h3 className="font-medium text-blue-800">Create New User</h3>
+                    <div className="grid grid-cols-2 gap-3">
+                      <input
+                        type="text"
+                        placeholder="Name"
+                        value={newUserName}
+                        onChange={(e) => setNewUserName(e.target.value)}
+                        className="px-3 py-2 border border-gray-200 rounded-lg text-sm col-span-2"
+                      />
+                      <input
+                        type="email"
+                        placeholder="Email"
+                        value={newUserEmail}
+                        onChange={(e) => setNewUserEmail(e.target.value)}
+                        className="px-3 py-2 border border-gray-200 rounded-lg text-sm col-span-2"
+                      />
+                      <input
+                        type="password"
+                        placeholder="Password"
+                        value={newUserPassword}
+                        onChange={(e) => setNewUserPassword(e.target.value)}
+                        className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                      />
+                      <select
+                        value={newUserRole}
+                        onChange={(e) => setNewUserRole(e.target.value as 'admin' | 'cashier')}
+                        className="px-3 py-2 border border-gray-200 rounded-lg text-sm cursor-pointer"
+                      >
+                        <option value="cashier">Cashier</option>
+                        <option value="admin">Admin</option>
+                      </select>
+                    </div>
+                    {createUserError && (
+                      <p className="text-red-600 text-sm">{createUserError}</p>
+                    )}
+                    <button
+                      type="button"
+                      onClick={createUser}
+                      disabled={creatingUser}
+                      className="w-full py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                    >
+                      {creatingUser ? 'Creating...' : 'Create User'}
+                    </button>
+                  </div>
+
                   {users.length === 0 ? (
                     <p className="text-gray-500 text-center py-10">No users found</p>
                   ) : (
                     <div className="space-y-3">
                       {users.map(user => (
-                        <div key={user.id} className="bg-white rounded-xl p-4 shadow-[0_2px_10px_rgba(0,0,0,0.08)] flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            {user.image && (
-                              <img src={user.image} alt={user.name} className="w-10 h-10 rounded-full" />
-                            )}
-                            <div>
-                              <p className="font-medium text-gray-800">{user.name}</p>
-                              <p className="text-sm text-gray-500">{user.email}</p>
+                        <div key={user.id} className="bg-white rounded-xl p-4 shadow-[0_2px_10px_rgba(0,0,0,0.08)]">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              {user.image && (
+                                <img src={user.image} alt={user.name} className="w-10 h-10 rounded-full" />
+                              )}
+                              <div>
+                                <p className="font-medium text-gray-800">{user.name}</p>
+                                <p className="text-sm text-gray-500">{user.email}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <select
+                                value={user.role || ''}
+                                onChange={(e) => {
+                                  const role = e.target.value as 'admin' | 'cashier';
+                                  if (role) updateUserRole(user.id, role);
+                                }}
+                                className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm cursor-pointer"
+                              >
+                                <option value="">No Role</option>
+                                <option value="cashier">Cashier</option>
+                                <option value="admin">Admin</option>
+                              </select>
+                              {user.role && user.id !== session?.user?.id && (
+                                <button
+                                  type="button"
+                                  onClick={() => removeUserRole(user.id)}
+                                  className="text-red-500 hover:text-red-700 text-sm cursor-pointer"
+                                >
+                                  Remove
+                                </button>
+                              )}
                             </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <select
-                              value={user.role || ''}
-                              onChange={(e) => {
-                                const role = e.target.value as 'admin' | 'cashier';
-                                if (role) updateUserRole(user.id, role);
-                              }}
-                              className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm cursor-pointer"
-                            >
-                              <option value="">No Role</option>
-                              <option value="cashier">Cashier</option>
-                              <option value="admin">Admin</option>
-                            </select>
-                            {user.role && user.id !== session?.user?.id && (
+                          {/* Reset Password */}
+                          <div className="mt-3 pt-3 border-t border-gray-100">
+                            {resetPasswordUserId === user.id ? (
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="password"
+                                  placeholder="New password"
+                                  value={resetPasswordValue}
+                                  onChange={(e) => setResetPasswordValue(e.target.value)}
+                                  className="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-sm"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => resetPassword(user.id)}
+                                  disabled={resettingPassword || !resetPasswordValue}
+                                  className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm cursor-pointer disabled:opacity-50"
+                                >
+                                  {resettingPassword ? 'Saving...' : 'Save'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => { setResetPasswordUserId(null); setResetPasswordValue(''); }}
+                                  className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg text-sm cursor-pointer"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            ) : (
                               <button
                                 type="button"
-                                onClick={() => removeUserRole(user.id)}
-                                className="text-red-500 hover:text-red-700 text-sm cursor-pointer"
+                                onClick={() => setResetPasswordUserId(user.id)}
+                                className="text-blue-600 hover:text-blue-800 text-sm cursor-pointer font-medium"
                               >
-                                Remove
+                                Reset Password
                               </button>
                             )}
                           </div>

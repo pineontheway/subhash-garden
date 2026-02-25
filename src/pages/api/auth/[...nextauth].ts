@@ -1,50 +1,54 @@
 import NextAuth, { NextAuthOptions } from 'next-auth';
-import GoogleProvider from 'next-auth/providers/google';
+import CredentialsProvider from 'next-auth/providers/credentials';
+import bcrypt from 'bcryptjs';
 import { db } from '@/lib/db';
 import { users } from '@/lib/schema';
 import { eq } from 'drizzle-orm';
 
 export const authOptions: NextAuthOptions = {
   providers: [
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+    CredentialsProvider({
+      name: 'Credentials',
+      credentials: {
+        email: { label: 'Email', type: 'email' },
+        password: { label: 'Password', type: 'password' },
+      },
+      async authorize(credentials) {
+        if (!credentials?.email || !credentials?.password) {
+          return null;
+        }
+
+        const dbUser = await db
+          .select()
+          .from(users)
+          .where(eq(users.email, credentials.email))
+          .get();
+
+        if (!dbUser || !dbUser.passwordHash) {
+          return null;
+        }
+
+        const isValid = await bcrypt.compare(credentials.password, dbUser.passwordHash);
+        if (!isValid) {
+          return null;
+        }
+
+        return {
+          id: dbUser.id,
+          email: dbUser.email,
+          name: dbUser.name,
+        };
+      },
     }),
   ],
   secret: process.env.NEXTAUTH_SECRET,
+  session: {
+    strategy: 'jwt',
+  },
+  pages: {
+    signIn: '/',
+  },
   callbacks: {
-    async signIn({ user, account }) {
-      if (account?.provider === 'google' && user.email) {
-        try {
-          // Check if user exists
-          const existingUser = await db.select().from(users).where(eq(users.email, user.email)).get();
-
-          if (!existingUser) {
-            // Create new user (no role assigned yet)
-            await db.insert(users).values({
-              id: user.id || account.providerAccountId,
-              email: user.email,
-              name: user.name || 'Unknown',
-              image: user.image || null,
-              role: null, // No role until admin assigns one
-            });
-          } else {
-            // Update existing user's name and image from Google profile
-            await db.update(users)
-              .set({
-                name: user.name || existingUser.name,
-                image: user.image || existingUser.image,
-                updatedAt: new Date().toISOString(),
-              })
-              .where(eq(users.email, user.email));
-          }
-        } catch (error) {
-          console.error('Error in signIn callback:', error);
-          // Allow sign in even if DB operation fails
-        }
-      }
-      return true;
-    },
     async session({ session, token }) {
       if (session.user && token.sub) {
         session.user.id = token.sub;
@@ -63,9 +67,9 @@ export const authOptions: NextAuthOptions = {
       }
       return session;
     },
-    async jwt({ token, user, account }) {
-      if (account && user) {
-        token.sub = user.id || account.providerAccountId;
+    async jwt({ token, user }) {
+      if (user) {
+        token.sub = user.id;
       }
       return token;
     },

@@ -4,6 +4,7 @@ import { authOptions } from '../auth/[...nextauth]';
 import { db } from '@/lib/db';
 import { users } from '@/lib/schema';
 import { eq } from 'drizzle-orm';
+import bcrypt from 'bcryptjs';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const session = await getServerSession(req, res, authOptions);
@@ -30,24 +31,73 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   }
 
-  // PUT - Update user role
-  if (req.method === 'PUT') {
+  // POST - Create a new user with password
+  if (req.method === 'POST') {
     try {
-      const { id, role } = req.body;
+      const { email, name, password, role } = req.body;
 
-      if (!id || !role) {
-        return res.status(400).json({ error: 'Missing id or role' });
+      if (!email || !name || !password) {
+        return res.status(400).json({ error: 'Missing email, name, or password' });
       }
 
-      if (!['admin', 'cashier'].includes(role)) {
+      if (role && !['admin', 'cashier'].includes(role)) {
         return res.status(400).json({ error: 'Invalid role. Must be admin or cashier' });
       }
 
+      // Check if user already exists
+      const existing = await db.select().from(users).where(eq(users.email, email)).get();
+      if (existing) {
+        return res.status(400).json({ error: 'User with this email already exists' });
+      }
+
+      const passwordHash = await bcrypt.hash(password, 10);
+      const id = crypto.randomUUID();
+
+      await db.insert(users).values({
+        id,
+        email,
+        name,
+        passwordHash,
+        role: role || null,
+      });
+
+      return res.status(201).json({ success: true, id });
+    } catch (error) {
+      console.error('Error creating user:', error);
+      return res.status(500).json({ error: 'Failed to create user' });
+    }
+  }
+
+  // PUT - Update user role and/or reset password
+  if (req.method === 'PUT') {
+    try {
+      const { id, role, password } = req.body;
+
+      if (!id) {
+        return res.status(400).json({ error: 'Missing user id' });
+      }
+
+      if (!role && !password) {
+        return res.status(400).json({ error: 'Nothing to update' });
+      }
+
+      const updateData: Record<string, any> = {
+        updatedAt: new Date().toISOString(),
+      };
+
+      if (role) {
+        if (!['admin', 'cashier'].includes(role)) {
+          return res.status(400).json({ error: 'Invalid role. Must be admin or cashier' });
+        }
+        updateData.role = role;
+      }
+
+      if (password) {
+        updateData.passwordHash = await bcrypt.hash(password, 10);
+      }
+
       await db.update(users)
-        .set({
-          role: role,
-          updatedAt: new Date().toISOString()
-        })
+        .set(updateData)
         .where(eq(users.id, id));
 
       return res.status(200).json({ success: true });
