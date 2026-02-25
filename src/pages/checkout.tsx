@@ -370,8 +370,15 @@ export default function Checkout() {
       lines.push('');
 
       (window as any).Android.print(lines.join('\n'));
-    } catch (e) {
-      console.error('Print failed:', e);
+    } catch (e: any) {
+      const debugInfo = [
+        `Error: ${e?.message || String(e)}`,
+        `Android exists: ${typeof (window as any).Android}`,
+        `Android.print exists: ${typeof (window as any).Android?.print}`,
+        `receiptData: ${receiptData ? 'yes' : 'no'}`,
+        `UserAgent: ${navigator.userAgent}`,
+      ].join('\n');
+      alert(`Print Error - Screenshot this:\n\n${debugInfo}`);
     }
   };
 
