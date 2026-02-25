@@ -39,6 +39,7 @@ export default function Checkout() {
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
   const [showQRModal, setShowQRModal] = useState(false);
   const [upiSettings, setUpiSettings] = useState<{ upi_id?: string; business_name?: string; clothes_upi_id?: string; clothes_business_name?: string }>({});
+  const [isAndroidWebView, setIsAndroidWebView] = useState(false);
   const receiptRef = useRef<HTMLDivElement>(null);
   const [items, setItems] = useState({
     name: '',
@@ -59,6 +60,13 @@ export default function Checkout() {
   // Linked transaction state
   const [parentTransactionId, setParentTransactionId] = useState<string | null>(null);
   const [parentAdvance, setParentAdvance] = useState(0);
+
+  // Detect Android WebView on mount
+  useEffect(() => {
+    if ((window as any).Android?.print) {
+      setIsAndroidWebView(true);
+    }
+  }, []);
 
   // Fetch prices from API
   useEffect(() => {
@@ -311,8 +319,7 @@ export default function Checkout() {
   };
 
   const handlePrint = () => {
-    // Check if running in Android WebView with print support
-    if (typeof window !== 'undefined' && (window as any).Android?.print && receiptData) {
+    if (isAndroidWebView && receiptData) {
       // Format receipt for 80mm thermal printer (48 chars per line)
       const W = 48;
       const divider = '-'.repeat(W);
@@ -369,8 +376,6 @@ export default function Checkout() {
       lines.push('');
 
       (window as any).Android.print(lines.join('\n'));
-    } else {
-      window.print();
     }
   };
 
