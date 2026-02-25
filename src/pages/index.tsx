@@ -55,11 +55,19 @@ export default function Home() {
   const [locker, setLocker] = useState(0);
   const [currentTime, setCurrentTime] = useState('');
   const [currentDate, setCurrentDate] = useState('');
+  const [isAndroidWebView, setIsAndroidWebView] = useState(false);
 
   // Linked transaction state
   const [existingTransaction, setExistingTransaction] = useState<ExistingTransaction | null>(null);
   const [loadingTransaction, setLoadingTransaction] = useState(false);
   const [isLinking, setIsLinking] = useState(false);
+
+  // Detect Android WebView on mount
+  useEffect(() => {
+    if ((window as any).Android?.print) {
+      setIsAndroidWebView(true);
+    }
+  }, []);
 
   // Update date and time on mount and every minute
   useEffect(() => {
@@ -257,6 +265,58 @@ export default function Home() {
               Sign in with Google
             </button>
           </div>
+
+          {/* Test Print Button - Only visible in Android WebView */}
+          {isAndroidWebView && (
+            <button
+              type="button"
+              onClick={() => {
+                const divider = '--------------------------------';
+                const lines: string[] = [];
+
+                lines.push('<center><big>Subhash Garden</big></center>');
+                lines.push('<center>Costume Rental</center>');
+                lines.push(divider);
+                lines.push('');
+                lines.push(`Date: ${currentDate} ${currentTime}`);
+                lines.push('Receipt #: HC-TEST1234');
+                lines.push('Cashier: Test User');
+                lines.push(divider);
+                lines.push('');
+                lines.push('Customer: Test Customer');
+                lines.push('Phone: +91 9876543210');
+                lines.push(divider);
+                lines.push('');
+                lines.push('Male Costume x2       Rs.400.00');
+                lines.push('Female Costume x1     Rs.200.00');
+                lines.push('Kids Costume x1       Rs.100.00');
+                lines.push('Tube x1               Rs.150.00');
+                lines.push('Locker x1             Rs.50.00');
+                lines.push(divider);
+                lines.push('Subtotal:           Rs.900.00');
+                lines.push('Advance Paid:       Rs.500.00');
+                lines.push(divider);
+                lines.push('<b>TOTAL:          Rs.400.00</b>');
+                lines.push('');
+                lines.push(divider);
+                lines.push('<center><b>PAYMENT RECEIVED</b></center>');
+                lines.push(divider);
+                lines.push('');
+                lines.push('<center>** TEST PRINT **</center>');
+                lines.push('<center>Thank you for visiting!</center>');
+                lines.push('<center>Have a great swim!</center>');
+                lines.push('');
+
+                (window as any).Android.print(lines.join('\n'));
+              }}
+              className="mt-6 w-full max-w-sm py-3 bg-white/20 backdrop-blur-sm text-white text-sm font-medium rounded-xl border border-white/30 hover:bg-white/30 active:bg-white/40 transition-colors cursor-pointer flex items-center justify-center gap-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+              </svg>
+              Test Print
+            </button>
+          )}
 
           {/* Footer */}
           <p className="text-cyan-100 text-sm mt-8 text-center">
