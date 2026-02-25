@@ -312,7 +312,8 @@ export default function Checkout() {
   };
 
   const handlePrint = () => {
-    if (receiptData && (window as any).Android?.print) {
+    if (!receiptData) return;
+    try {
       // Format receipt for 80mm thermal printer (48 chars per line)
       const W = 48;
       const divider = '-'.repeat(W);
@@ -369,6 +370,8 @@ export default function Checkout() {
       lines.push('');
 
       (window as any).Android.print(lines.join('\n'));
+    } catch (e) {
+      console.error('Print failed:', e);
     }
   };
 
