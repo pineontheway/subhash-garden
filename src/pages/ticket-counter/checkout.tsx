@@ -140,21 +140,21 @@ export default function TicketCheckout() {
   const lineItems: { label: string; qty: number; price: number }[] = [];
   if (items.menTicket > 0) {
     lineItems.push({
-      label: 'Men Ticket',
+      label: 'Men (Above 10)',
       qty: items.menTicket,
       price: items.menTicket * (prices.men_ticket || 0),
     });
   }
   if (items.womenTicket > 0) {
     lineItems.push({
-      label: 'Women Ticket',
+      label: 'Women (Above 10)',
       qty: items.womenTicket,
       price: items.womenTicket * (prices.women_ticket || 0),
     });
   }
   if (items.childTicket > 0) {
     lineItems.push({
-      label: 'Child Ticket',
+      label: 'Child (Below 10)',
       qty: items.childTicket,
       price: items.childTicket * (prices.child_ticket || 0),
     });
