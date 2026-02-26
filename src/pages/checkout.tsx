@@ -26,6 +26,9 @@ type ReceiptData = {
   parentReceiptId?: string;
   parentAdvance?: number;
   remainingAdvance?: number;
+  paymentMethod?: 'upi' | 'cash' | 'split';
+  splitCash?: number;
+  splitUpi?: number;
 };
 
 export default function Checkout() {
@@ -297,6 +300,9 @@ export default function Checkout() {
           parentReceiptId: parentTransactionId ? parentTransactionId.slice(-8).toUpperCase() : undefined,
           parentAdvance: isLinked ? parentAdvance : undefined,
           remainingAdvance: isLinked ? remainingAdvance : undefined,
+          paymentMethod: isLinked ? undefined : paymentMethod,
+          splitCash: paymentMethod === 'split' ? splitCash : undefined,
+          splitUpi: paymentMethod === 'split' ? splitUpi : undefined,
         });
         setShowQRModal(false);
         setShowReceipt(true);
@@ -323,6 +329,7 @@ export default function Checkout() {
 
       lines.push('<center><big>Subhash Garden</big></center>');
       lines.push('<center>Costume Rental</center>');
+      lines.push('<center>GSTIN: 36AJBPK1262EIZO</center>');
       lines.push('');
       lines.push(blackBar);
       lines.push(`Cashier: ${receiptData.cashierName}`);
@@ -354,6 +361,7 @@ export default function Checkout() {
         lines.push(`<b>${fmt('REMAINING:', `Rs.${receiptData.remainingAdvance?.toFixed(2)}`)}</b>`);
       } else {
         lines.push(fmt('Subtotal:', `Rs.${receiptData.subtotal.toFixed(2)}`));
+        lines.push('(Incl. GST)');
         lines.push(fmt('Advance Paid:', `Rs.${receiptData.advance.toFixed(2)}`));
         lines.push(divider);
         lines.push(`<b>${fmt('TOTAL:', `Rs.${receiptData.totalDue.toFixed(2)}`)}</b>`);
@@ -361,8 +369,19 @@ export default function Checkout() {
 
       lines.push('');
       lines.push(divider);
-      const status = receiptData.isLinked ? 'CREDIT APPLIED' : receiptData.isVIP ? 'VIP - COMPLIMENTARY' : 'PAYMENT RECEIVED';
-      lines.push(`<center><b>${status}</b></center>`);
+      if (receiptData.isLinked) {
+        lines.push(`<center><b>CREDIT APPLIED</b></center>`);
+      } else if (receiptData.isVIP) {
+        lines.push(`<center><b>VIP - COMPLIMENTARY</b></center>`);
+      } else if (receiptData.paymentMethod === 'split') {
+        lines.push(`<center><b>SPLIT PAYMENT</b></center>`);
+        lines.push(fmt('Cash:', `Rs.${receiptData.splitCash?.toFixed(2)}`));
+        lines.push(fmt('UPI:', `Rs.${receiptData.splitUpi?.toFixed(2)}`));
+      } else if (receiptData.paymentMethod === 'upi') {
+        lines.push(`<center><b>PAID BY UPI</b></center>`);
+      } else {
+        lines.push(`<center><b>PAID BY CASH</b></center>`);
+      }
       lines.push(divider);
       lines.push('');
       lines.push('<center>Thank you for visiting!</center>');
@@ -910,8 +929,16 @@ export default function Checkout() {
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  {receiptData.isLinked ? 'CREDIT APPLIED' : receiptData.isVIP ? 'VIP - COMPLIMENTARY' : 'PAYMENT RECEIVED'}
+                  {receiptData.isLinked ? 'CREDIT APPLIED' : receiptData.isVIP ? 'VIP - COMPLIMENTARY' : receiptData.paymentMethod === 'upi' ? 'PAID BY UPI' : receiptData.paymentMethod === 'cash' ? 'PAID BY CASH' : receiptData.paymentMethod === 'split' ? 'SPLIT PAYMENT' : 'PAYMENT RECEIVED'}
                 </div>
+                {receiptData.paymentMethod === 'split' && (
+                  <div className="mt-2 text-sm text-gray-600 space-y-1">
+                    <div className="flex justify-center gap-4">
+                      <span>Cash: ₹{receiptData.splitCash?.toFixed(2)}</span>
+                      <span>UPI: ₹{receiptData.splitUpi?.toFixed(2)}</span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Footer */}

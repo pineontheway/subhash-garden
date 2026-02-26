@@ -22,6 +22,8 @@ type ReceiptData = {
   lineItems: { label: string; qty: number; price: number }[];
   total: number;
   paymentMethod: 'upi' | 'cash' | 'split';
+  splitCash?: number;
+  splitUpi?: number;
   isVIP?: boolean;
 };
 
@@ -244,6 +246,8 @@ export default function TicketCheckout() {
           lineItems,
           total: totalDue,
           paymentMethod: method,
+          splitCash: method === 'split' ? splitCash : undefined,
+          splitUpi: method === 'split' ? splitUpi : undefined,
           isVIP,
         });
         setShowQRModal(false);
@@ -279,6 +283,7 @@ export default function TicketCheckout() {
 
       lines.push('<center><big>Subhash Garden</big></center>');
       lines.push('<center>Entry Ticket</center>');
+      lines.push('<center>GSTIN: 36AJBPK1262EIZO</center>');
       lines.push('');
       lines.push(blackBar);
       lines.push(`Cashier: ${receiptData.cashierName}`);
@@ -307,12 +312,21 @@ export default function TicketCheckout() {
       lines.push(divider);
       const totalText = receiptData.isVIP ? 'FREE (VIP)' : `Rs.${receiptData.total.toFixed(2)}`;
       lines.push(`<b>${fmt('TOTAL PAID:', totalText)}</b>`);
+      if (!receiptData.isVIP) {
+        lines.push('(Incl. GST)');
+      }
       lines.push('');
       lines.push(divider);
-      const status = receiptData.isVIP ? 'VIP - COMPLIMENTARY' : 'PAYMENT RECEIVED';
-      lines.push(`<center><b>${status}</b></center>`);
-      if (!receiptData.isVIP) {
-        lines.push(`<center>Paid via ${receiptData.paymentMethod.toUpperCase()}</center>`);
+      if (receiptData.isVIP) {
+        lines.push(`<center><b>VIP - COMPLIMENTARY</b></center>`);
+      } else if (receiptData.paymentMethod === 'split') {
+        lines.push(`<center><b>SPLIT PAYMENT</b></center>`);
+        lines.push(fmt('Cash:', `Rs.${receiptData.splitCash?.toFixed(2)}`));
+        lines.push(fmt('UPI:', `Rs.${receiptData.splitUpi?.toFixed(2)}`));
+      } else if (receiptData.paymentMethod === 'upi') {
+        lines.push(`<center><b>PAID BY UPI</b></center>`);
+      } else {
+        lines.push(`<center><b>PAID BY CASH</b></center>`);
       }
       lines.push(divider);
       lines.push('');
@@ -780,12 +794,15 @@ export default function TicketCheckout() {
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  {receiptData.isVIP ? 'VIP - COMPLIMENTARY' : 'PAYMENT RECEIVED'}
+                  {receiptData.isVIP ? 'VIP - COMPLIMENTARY' : receiptData.paymentMethod === 'upi' ? 'PAID BY UPI' : receiptData.paymentMethod === 'cash' ? 'PAID BY CASH' : receiptData.paymentMethod === 'split' ? 'SPLIT PAYMENT' : 'PAYMENT RECEIVED'}
                 </div>
-                {!receiptData.isVIP && (
-                  <p className="text-xs text-gray-500 mt-1">
-                    Paid via {receiptData.paymentMethod.toUpperCase()}
-                  </p>
+                {receiptData.paymentMethod === 'split' && !receiptData.isVIP && (
+                  <div className="mt-2 text-sm text-gray-600 space-y-1">
+                    <div className="flex justify-center gap-4">
+                      <span>Cash: ₹{receiptData.splitCash?.toFixed(2)}</span>
+                      <span>UPI: ₹{receiptData.splitUpi?.toFixed(2)}</span>
+                    </div>
+                  </div>
                 )}
               </div>
 
