@@ -372,7 +372,7 @@ export default function Checkout() {
       } else if (receiptData.isVIP) {
         lines.push(`<center><b>VIP - COMPLIMENTARY</b></center>`);
       } else if (receiptData.paymentMethod === 'split') {
-        lines.push(`<center><b>SPLIT PAYMENT</b></center>`);
+        lines.push(`<center><b>PAYMENT RECEIVED</b></center>`);
         lines.push(fmt('Cash:', `Rs.${receiptData.splitCash?.toFixed(2)}`));
         lines.push(fmt('UPI:', `Rs.${receiptData.splitUpi?.toFixed(2)}`));
       } else if (receiptData.paymentMethod === 'upi') {
@@ -383,7 +383,6 @@ export default function Checkout() {
       lines.push(divider);
       lines.push('');
       lines.push('<center>Thank you for visiting!</center>');
-      lines.push('<center>Have a great swim!</center>');
       lines.push('');
 
       (window as any).Android.print(lines.join('\n'));
