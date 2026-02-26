@@ -58,6 +58,7 @@ export default function Checkout() {
   const [paymentMethod, setPaymentMethod] = useState<'upi' | 'cash' | 'split'>('upi');
   const [splitUpi, setSplitUpi] = useState(0);
   const [splitCash, setSplitCash] = useState(0);
+  const [showCashConfirm, setShowCashConfirm] = useState(false);
 
   // Linked transaction state
   const [parentTransactionId, setParentTransactionId] = useState<string | null>(null);
@@ -795,7 +796,14 @@ export default function Checkout() {
               </button>
               <button
                 type="button"
-                onClick={saveTransaction}
+                onClick={() => {
+                  if (paymentMethod === 'split') {
+                    setShowQRModal(false);
+                    setShowCashConfirm(true);
+                  } else {
+                    saveTransaction();
+                  }
+                }}
                 disabled={saving}
                 className={`flex-1 py-3 text-white font-semibold rounded-xl cursor-pointer disabled:bg-gray-400 ${
                   paymentMethod === 'split'
@@ -805,7 +813,67 @@ export default function Checkout() {
                       : 'bg-green-600 hover:bg-green-700'
                 }`}
               >
-                {saving ? 'Processing...' : paymentMethod === 'split' ? 'Payment Received' : 'Payment Received'}
+                {saving ? 'Processing...' : paymentMethod === 'split' ? 'UPI Received' : 'Payment Received'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cash Confirmation Modal (Split Payment Step 2) */}
+      {showCashConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-sm w-full overflow-hidden">
+            {/* Modal Header */}
+            <div className="p-5 text-center bg-green-50">
+              <div className="w-16 h-16 mx-auto rounded-full flex items-center justify-center mb-3 bg-green-100">
+                <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+              </div>
+              <h2 className="text-xl font-bold text-green-800">Collect Cash</h2>
+              <p className="text-gray-600 text-sm mt-1">UPI portion received successfully</p>
+            </div>
+
+            {/* Cash Amount */}
+            <div className="p-6">
+              <div className="bg-green-50 rounded-xl p-6 text-center mb-4">
+                <p className="text-gray-600 text-sm mb-1">Collect from Customer</p>
+                <p className="text-4xl font-bold text-green-600">
+                  Rs.{splitCash.toFixed(2)}
+                </p>
+                <p className="text-green-700 font-medium mt-1">in Cash</p>
+              </div>
+
+              <div className="bg-purple-50 rounded-xl p-3 text-center">
+                <p className="text-purple-600 text-sm">
+                  UPI ₹{splitUpi.toFixed(2)} already received
+                </p>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="p-4 border-t border-gray-100 flex gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCashConfirm(false);
+                  setShowQRModal(true);
+                }}
+                className="flex-1 py-3 bg-gray-100 text-gray-700 font-semibold rounded-xl hover:bg-gray-200 cursor-pointer"
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCashConfirm(false);
+                  saveTransaction();
+                }}
+                disabled={saving}
+                className="flex-1 py-3 bg-green-600 text-white font-semibold rounded-xl hover:bg-green-700 cursor-pointer disabled:bg-gray-400"
+              >
+                {saving ? 'Processing...' : 'Cash Collected'}
               </button>
             </div>
           </div>
