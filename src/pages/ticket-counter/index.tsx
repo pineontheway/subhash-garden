@@ -343,7 +343,7 @@ export default function TicketCounter() {
             onClick={handleCheckout}
             className="w-full py-4 bg-blue-700 text-white text-lg font-semibold rounded-xl hover:bg-blue-800 active:bg-blue-900 cursor-pointer"
           >
-            Proceed to Checkout
+            Proceed
           </button>
         </div>
       </div>
