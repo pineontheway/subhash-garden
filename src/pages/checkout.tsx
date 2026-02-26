@@ -329,7 +329,6 @@ export default function Checkout() {
 
       lines.push('<center><big>Subhash Garden</big></center>');
       lines.push('<center>Costume Rental</center>');
-      lines.push('<center>GSTIN: 36AJBPK1262EIZO</center>');
       lines.push('');
       lines.push(blackBar);
       lines.push(`Cashier: ${receiptData.cashierName}`);
@@ -361,7 +360,6 @@ export default function Checkout() {
         lines.push(`<b>${fmt('REMAINING:', `Rs.${receiptData.remainingAdvance?.toFixed(2)}`)}</b>`);
       } else {
         lines.push(fmt('Subtotal:', `Rs.${receiptData.subtotal.toFixed(2)}`));
-        lines.push('(Incl. GST)');
         lines.push(fmt('Advance Paid:', `Rs.${receiptData.advance.toFixed(2)}`));
         lines.push(divider);
         lines.push(`<b>${fmt('TOTAL:', `Rs.${receiptData.totalDue.toFixed(2)}`)}</b>`);
