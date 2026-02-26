@@ -331,7 +331,6 @@ export default function TicketCheckout() {
       lines.push(divider);
       lines.push('');
       lines.push('<center>Thank you for visiting!</center>');
-      lines.push('<center>Have a great time!</center>');
       lines.push('');
 
       (window as any).Android.print(lines.join('\n'));
