@@ -1,6 +1,6 @@
 # Subhash Garden - POS System
 
-Water park & resort management system. Mobile-first PWA for two counter operations: **Clothes Counter** (costume rental) and **Ticket Counter** (entry tickets).
+Water park & resort management system. Mobile-first PWA for two counter operations: **Clothes Counter** (dress/tube/locker rental) and **Ticket Counter** (entry tickets).
 
 ## Tech Stack
 
@@ -64,7 +64,7 @@ drizzle/                 - Migration files
 | Field | Type | Notes |
 |-------|------|-------|
 | id | text PK | |
-| itemKey | text unique | `male_costume`, `female_costume`, `kids_costume`, `tube`, `locker`, `men_ticket`, `women_ticket`, `child_ticket` |
+| itemKey | text unique | `male_costume` (used for Dress pricing), `female_costume` (legacy), `kids_costume` (legacy), `tube`, `locker`, `men_ticket`, `women_ticket`, `child_ticket` |
 | itemName | text | Display name |
 | price | real | |
 | isActive | boolean | Default true |
@@ -80,7 +80,7 @@ Key-value store. Important keys:
 | Field | Type | Notes |
 |-------|------|-------|
 | customerName, customerPhone | text | |
-| maleCostume, femaleCostume, kidsCostume, tube, locker | integer | Quantities |
+| maleCostume, femaleCostume, kidsCostume, tube, locker | integer | Quantities. UI shows single "Dress" item; `maleCostume` stores dress count, `femaleCostume` and `kidsCostume` are always 0 for new transactions. Old transactions may have data in all 3 costume columns — code sums them for backward compat. |
 | subtotal | real | Items cost |
 | advance | real | Amount collected upfront |
 | totalDue | real | For normal: subtotal+advance. For VIP: just advance. For linked: subtotal |
@@ -206,3 +206,4 @@ Receipt IDs: `HC-{last8chars}` (clothes), `TKT-{last8chars}` (tickets)
 - Split payment amounts must sum exactly to total
 - Session-based counter selection persists in sessionStorage
 - URL params used to pass data between index → checkout pages
+- **Dress unification**: Male/Female/Kids Costume merged into single "Dress" item. `ItemType = 'dress' | 'tube' | 'locker'`. The `dress` type maps to `maleCostume` DB column (`male_costume` price key). Display/inventory/return code sums all 3 costume columns for backward compat with old transactions. No DB migration was done.
