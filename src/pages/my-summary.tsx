@@ -172,7 +172,7 @@ export default function MySummary() {
     return acc;
   }, {} as Record<string, number>);
   const vehicleTypeLabels: Record<string, string> = {
-    'walk-in': 'Walk-in', 'bike': 'Bike', 'auto': 'Auto',
+    'walk-in': 'Walk-in', 'bike': 'Bike', 'auto': 'Auto', 'van': 'Van',
     'car': 'Car', 'bus': 'Bus', 'school-bus': 'School Bus', 'unknown': 'Unknown',
   };
 
@@ -273,7 +273,7 @@ export default function MySummary() {
                 <div className="bg-white rounded-2xl p-4 shadow-[0_4px_20px_rgba(0,0,0,0.08)] mb-4">
                   <p className="text-sm font-medium text-gray-800 mb-3">Vehicle Types</p>
                   <div className="grid grid-cols-3 gap-2">
-                    {['walk-in', 'bike', 'auto', 'car', 'bus', 'school-bus']
+                    {['walk-in', 'bike', 'auto', 'car', 'bus', 'van', 'school-bus']
                       .filter(type => vehicleTypeCounts[type] > 0)
                       .map(type => (
                         <div key={type} className="bg-gray-50 rounded-xl p-3 text-center">

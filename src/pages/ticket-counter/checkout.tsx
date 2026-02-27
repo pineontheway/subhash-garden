@@ -297,7 +297,7 @@ export default function TicketCheckout() {
       if (receiptData.vehicleType) {
         const vehicleLabels: Record<string, string> = {
           'walk-in': 'Walk-in', 'bike': 'Bike', 'auto': 'Auto',
-          'car': 'Car', 'bus': 'Bus', 'school-bus': 'School Bus',
+          'car': 'Car', 'bus': 'Bus', 'van': 'Van', 'school-bus': 'School Bus',
         };
         lines.push(`Vehicle Type: ${vehicleLabels[receiptData.vehicleType] || receiptData.vehicleType}`);
       }

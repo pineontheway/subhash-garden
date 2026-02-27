@@ -281,11 +281,11 @@ export default function TicketCounter() {
               className={`w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white ${vehicleType ? 'text-gray-900' : 'text-gray-400'}`}
             >
               <option value="" disabled>Select vehicle type</option>
-              <option value="walk-in">Walk-in</option>
               <option value="bike">Bike</option>
               <option value="auto">Auto</option>
               <option value="car">Car</option>
               <option value="bus">Bus</option>
+              <option value="van">Van</option>
               <option value="school-bus">School Bus</option>
             </select>
           </div>
