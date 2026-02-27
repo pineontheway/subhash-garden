@@ -162,7 +162,7 @@ export default function Checkout() {
   }
   if (items.locker > 0) {
     lineItems.push({
-      label: items.lockerNumbers ? `Locker (${items.lockerNumbers})` : 'Locker',
+      label: 'Locker Rent',
       qty: items.locker,
       price: items.locker * (prices.locker || 0),
     });
@@ -335,7 +335,7 @@ export default function Checkout() {
         lines.push(`${itemLine.padEnd(W - priceLine.length)}${priceLine}`);
       });
       if (receiptData.lockerNumbers) {
-        lines.push(`  Locker #: ${receiptData.lockerNumbers}`);
+        lines.push(`  Locker Number #: ${receiptData.lockerNumbers}`);
       }
 
       lines.push(divider);
