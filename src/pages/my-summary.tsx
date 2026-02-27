@@ -30,7 +30,8 @@ type TicketTransaction = {
   id: string;
   customerName: string;
   customerPhone: string;
-  vehicleNumber: string | null;
+  // vehicleNumber disabled per user request
+  // vehicleNumber: string | null;
   menTicket: number;
   womenTicket: number;
   childTicket: number;
@@ -289,9 +290,10 @@ export default function MySummary() {
                             </span>
                           </div>
                           <p className="text-sm text-gray-500">+91 {transaction.customerPhone}</p>
-                          {transaction.vehicleNumber && (
+                          {/* Vehicle number disabled per user request */}
+                          {/* {transaction.vehicleNumber && (
                             <p className="text-xs text-gray-400">{transaction.vehicleNumber}</p>
-                          )}
+                          )} */}
                         </div>
                         <div className="text-right">
                           <p className={`font-semibold ${transaction.isComplimentary ? 'text-purple-600' : 'text-blue-600'}`}>

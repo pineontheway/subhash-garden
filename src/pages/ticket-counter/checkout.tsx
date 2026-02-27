@@ -16,7 +16,8 @@ type ReceiptData = {
   timestamp: string;
   customerName: string;
   customerPhone: string;
-  vehicleNumber?: string;
+  // vehicleNumber disabled per user request
+  // vehicleNumber?: string;
   tagNumbers?: string[];
   cashierName: string;
   lineItems: { label: string; qty: number; price: number }[];
@@ -41,7 +42,8 @@ export default function TicketCheckout() {
   const [items, setItems] = useState({
     name: '',
     phone: '',
-    vehicleNumber: '',
+    // vehicleNumber disabled per user request
+    // vehicleNumber: '',
     tagNumbers: '',
     menTicket: 0,
     womenTicket: 0,
@@ -120,7 +122,8 @@ export default function TicketCheckout() {
       const parsedItems = {
         name: (name as string) || '',
         phone: (phone as string) || '',
-        vehicleNumber: (vehicle as string) || '',
+        // vehicleNumber disabled per user request
+        // vehicleNumber: (vehicle as string) || '',
         tagNumbers: (tags as string) || '',
         menTicket: parseInt(men as string) || 0,
         womenTicket: parseInt(women as string) || 0,
@@ -217,7 +220,8 @@ export default function TicketCheckout() {
         body: JSON.stringify({
           customerName: items.name,
           customerPhone: items.phone,
-          vehicleNumber: items.vehicleNumber || null,
+          // vehicleNumber disabled per user request
+          // vehicleNumber: items.vehicleNumber || null,
           tagNumbers: items.tagNumbers || null,
           menTicket: items.menTicket,
           womenTicket: items.womenTicket,
@@ -241,7 +245,8 @@ export default function TicketCheckout() {
           }),
           customerName: items.name,
           customerPhone: items.phone,
-          vehicleNumber: items.vehicleNumber,
+          // vehicleNumber disabled per user request
+          // vehicleNumber: items.vehicleNumber,
           tagNumbers: items.tagNumbers ? items.tagNumbers.split(',').map(t => t.trim()) : undefined,
           cashierName: session?.user?.name || 'Unknown',
           lineItems,
@@ -294,9 +299,10 @@ export default function TicketCheckout() {
       lines.push('');
       lines.push(`Customer: ${receiptData.customerName}`);
       lines.push(`Phone: +91 ${receiptData.customerPhone}`);
-      if (receiptData.vehicleNumber) {
-        lines.push(`Vehicle: ${receiptData.vehicleNumber}`);
-      }
+      // Vehicle number disabled per user request
+      // if (receiptData.vehicleNumber) {
+      //   lines.push(`Vehicle: ${receiptData.vehicleNumber}`);
+      // }
       if (receiptData.tagNumbers && receiptData.tagNumbers.length > 0) {
         lines.push(`Tags: ${receiptData.tagNumbers.join(', ')}`);
       }
@@ -360,9 +366,10 @@ export default function TicketCheckout() {
       women: items.womenTicket.toString(),
       child: items.childTicket.toString(),
     });
-    if (items.vehicleNumber) {
-      params.set('vehicle', items.vehicleNumber);
-    }
+    // Vehicle number disabled per user request
+    // if (items.vehicleNumber) {
+    //   params.set('vehicle', items.vehicleNumber);
+    // }
     if (items.tagNumbers) {
       params.set('tags', items.tagNumbers);
     }
@@ -426,12 +433,13 @@ export default function TicketCheckout() {
               <span className="text-gray-600">Phone Number</span>
               <span className="text-gray-900 font-medium">+91 {items.phone}</span>
             </div>
-            {items.vehicleNumber && (
+            {/* Vehicle number disabled per user request */}
+            {/* {items.vehicleNumber && (
               <div className="flex items-center justify-between py-2 border-b border-gray-100">
                 <span className="text-gray-600">Vehicle Number</span>
                 <span className="text-gray-900 font-medium">{items.vehicleNumber}</span>
               </div>
-            )}
+            )} */}
             {items.tagNumbers && (
               <div className="py-2">
                 <span className="text-gray-600 block mb-1">Tag Numbers</span>
@@ -819,12 +827,13 @@ export default function TicketCheckout() {
                   <span>Phone:</span>
                   <span>+91 {receiptData.customerPhone}</span>
                 </div>
-                {receiptData.vehicleNumber && (
+                {/* Vehicle number disabled per user request */}
+                {/* {receiptData.vehicleNumber && (
                   <div className="flex justify-between">
                     <span>Vehicle:</span>
                     <span>{receiptData.vehicleNumber}</span>
                   </div>
-                )}
+                )} */}
                 {receiptData.tagNumbers && receiptData.tagNumbers.length > 0 && (
                   <div className="pt-1">
                     <span className="block mb-1">Tag Numbers:</span>

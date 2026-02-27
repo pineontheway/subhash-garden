@@ -8,7 +8,8 @@ export default function TicketCounter() {
   const { data: session, status } = useSession();
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
-  const [vehicleNumber, setVehicleNumber] = useState('');
+  // Vehicle number disabled per user request
+  // const [vehicleNumber, setVehicleNumber] = useState('');
   const [menTicket, setMenTicket] = useState(0);
   const [womenTicket, setWomenTicket] = useState(0);
   const [childTicket, setChildTicket] = useState(0);
@@ -54,7 +55,8 @@ export default function TicketCounter() {
       const { name: qName, phone: qPhone, vehicle, men, women, child } = router.query;
       if (qName) setName(qName as string);
       if (qPhone) setPhone(qPhone as string);
-      if (vehicle) setVehicleNumber(vehicle as string);
+      // Vehicle number disabled per user request
+      // if (vehicle) setVehicleNumber(vehicle as string);
       if (men) setMenTicket(parseInt(men as string) || 0);
       if (women) setWomenTicket(parseInt(women as string) || 0);
       if (child) setChildTicket(parseInt(child as string) || 0);
@@ -126,9 +128,10 @@ export default function TicketCounter() {
       child: childTicket.toString(),
       tags: assignedTags.join(','),
     });
-    if (vehicleNumber.trim()) {
-      params.set('vehicle', vehicleNumber.trim());
-    }
+    // Vehicle number disabled per user request
+    // if (vehicleNumber.trim()) {
+    //   params.set('vehicle', vehicleNumber.trim());
+    // }
     router.push(`/ticket-counter/checkout?${params.toString()}`);
   };
 
@@ -270,8 +273,8 @@ export default function TicketCounter() {
             </div>
           </div>
 
-          {/* Vehicle Number Input */}
-          <div>
+          {/* Vehicle Number Input - disabled per user request */}
+          {/* <div>
             <label className="block text-gray-700 mb-2">Vehicle Number <span className="text-gray-400 text-sm">(Optional)</span></label>
             <input
               type="text"
@@ -280,7 +283,7 @@ export default function TicketCounter() {
               onChange={(e) => setVehicleNumber(e.target.value.toUpperCase())}
               className="w-full px-4 py-3 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
-          </div>
+          </div> */}
 
           {/* Tickets Card */}
           <div className="bg-white rounded-2xl p-5 shadow-[0_4px_20px_rgba(0,0,0,0.08)]">

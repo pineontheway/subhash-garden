@@ -33,7 +33,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const {
         customerName,
         customerPhone,
-        vehicleNumber,
+        // vehicleNumber disabled per user request
+        // vehicleNumber,
         menTicket,
         womenTicket,
         childTicket,
@@ -61,7 +62,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         id: randomUUID(),
         customerName,
         customerPhone,
-        vehicleNumber: vehicleNumber || null,
+        // vehicleNumber disabled per user request
+        vehicleNumber: null,
         menTicket: menTicket || 0,
         womenTicket: womenTicket || 0,
         childTicket: childTicket || 0,
@@ -104,8 +106,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           or(
             like(ticketTransactions.customerPhone, `%${searchTerm}%`),
             like(ticketTransactions.id, `%${searchTerm}%`),
-            like(ticketTransactions.customerName, `%${searchTerm}%`),
-            like(ticketTransactions.vehicleNumber, `%${searchTerm}%`)
+            like(ticketTransactions.customerName, `%${searchTerm}%`)
+            // vehicleNumber search disabled per user request
+            // like(ticketTransactions.vehicleNumber, `%${searchTerm}%`)
           )!
         );
       }
