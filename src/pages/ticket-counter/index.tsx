@@ -79,12 +79,12 @@ export default function TicketCounter() {
     );
   }
 
-  // Validate Indian phone number
-  const validateIndianPhone = (phoneNumber: string): boolean => {
-    const cleaned = phoneNumber.replace(/[\s-]/g, '').replace(/^(\+91|91|0)/, '');
-    const indianMobileRegex = /^[6-9]\d{9}$/;
-    return indianMobileRegex.test(cleaned);
-  };
+  // Indian phone validation disabled per user request
+  // const validateIndianPhone = (phoneNumber: string): boolean => {
+  //   const cleaned = phoneNumber.replace(/[\s-]/g, '').replace(/^(\+91|91|0)/, '');
+  //   const indianMobileRegex = /^[6-9]\d{9}$/;
+  //   return indianMobileRegex.test(cleaned);
+  // };
 
   // Generate tag numbers for this transaction
   const generateTagNumbers = (count: number): string[] => {
@@ -109,10 +109,11 @@ export default function TicketCounter() {
       alert('Please enter phone number');
       return;
     }
-    if (!validateIndianPhone(phone)) {
-      alert('Please enter a valid 10-digit Indian mobile number');
-      return;
-    }
+    // Indian phone validation disabled per user request
+    // if (!validateIndianPhone(phone)) {
+    //   alert('Please enter a valid 10-digit Indian mobile number');
+    //   return;
+    // }
     if (totalTickets === 0) {
       alert('Please select at least one ticket');
       return;

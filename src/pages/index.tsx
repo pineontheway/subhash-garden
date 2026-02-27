@@ -362,14 +362,14 @@ export default function Home() {
     );
   }
 
-  // Validate Indian phone number
-  const validateIndianPhone = (phoneNumber: string): boolean => {
-    // Remove spaces, dashes, and common prefixes
-    const cleaned = phoneNumber.replace(/[\s-]/g, '').replace(/^(\+91|91|0)/, '');
-    // Indian mobile: 10 digits starting with 6, 7, 8, or 9
-    const indianMobileRegex = /^[6-9]\d{9}$/;
-    return indianMobileRegex.test(cleaned);
-  };
+  // Indian phone validation disabled per user request
+  // const validateIndianPhone = (phoneNumber: string): boolean => {
+  //   // Remove spaces, dashes, and common prefixes
+  //   const cleaned = phoneNumber.replace(/[\s-]/g, '').replace(/^(\+91|91|0)/, '');
+  //   // Indian mobile: 10 digits starting with 6, 7, 8, or 9
+  //   const indianMobileRegex = /^[6-9]\d{9}$/;
+  //   return indianMobileRegex.test(cleaned);
+  // };
 
   const handleCheckout = () => {
     if (!name.trim()) {
@@ -380,10 +380,11 @@ export default function Home() {
       alert('Please enter phone number');
       return;
     }
-    if (!validateIndianPhone(phone)) {
-      alert('Please enter a valid 10-digit Indian mobile number');
-      return;
-    }
+    // Indian phone validation disabled per user request
+    // if (!validateIndianPhone(phone)) {
+    //   alert('Please enter a valid 10-digit Indian mobile number');
+    //   return;
+    // }
     const total = maleCostume + femaleCostume + kidsCostume + tube + locker;
     if (total === 0) {
       alert('Please select at least one item');
