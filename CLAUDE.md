@@ -81,6 +81,7 @@ Key-value store. Important keys:
 |-------|------|-------|
 | customerName, customerPhone | text | |
 | maleCostume, femaleCostume, kidsCostume, tube, locker | integer | Quantities. UI shows single "Dress" item; `maleCostume` stores dress count, `femaleCostume` and `kidsCostume` are always 0 for new transactions. Old transactions may have data in all 3 costume columns — code sums them for backward compat. |
+| lockerNumbers | text nullable | Free-form locker number(s) text. Compulsory when locker > 0 (validated in UI). Displayed on receipt and in return-advance modal. |
 | subtotal | real | Items cost |
 | advance | real | Amount collected upfront |
 | totalDue | real | For normal: subtotal+advance. For VIP: just advance. For linked: subtotal |

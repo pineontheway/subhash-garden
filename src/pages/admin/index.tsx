@@ -29,6 +29,7 @@ type Transaction = {
   kidsCostume: number;
   tube: number;
   locker: number;
+  lockerNumbers: string | null;
   subtotal: number;
   advance: number;
   totalDue: number;

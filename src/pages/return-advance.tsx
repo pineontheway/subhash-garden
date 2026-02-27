@@ -13,6 +13,7 @@ type Transaction = {
   kidsCostume: number;
   tube: number;
   locker: number;
+  lockerNumbers?: string | null;
   subtotal: number;
   advance: number;
   totalDue: number;
@@ -518,6 +519,13 @@ export default function ReturnAdvance() {
                   <span className="font-medium text-gray-800">HC-{selectedTransaction.id.slice(-8).toUpperCase()}</span>
                 </div>
               </div>
+
+              {/* Locker Numbers Info */}
+              {selectedTransaction.lockerNumbers && (
+                <div className="bg-blue-50 rounded-xl p-3 mb-4 flex items-center gap-2">
+                  <span className="text-sm text-blue-700 font-medium">Locker #: {selectedTransaction.lockerNumbers}</span>
+                </div>
+              )}
 
               {/* Item Selection */}
               <div className="mb-4">

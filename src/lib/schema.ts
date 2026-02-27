@@ -61,6 +61,7 @@ export const transactions = sqliteTable('transactions', {
   kidsCostume: integer('kids_costume').default(0).notNull(),
   tube: integer('tube').default(0).notNull(),
   locker: integer('locker').default(0).notNull(),
+  lockerNumbers: text('locker_numbers'),
   subtotal: real('subtotal').notNull(),
   advance: real('advance').notNull(),
   totalDue: real('total_due').notNull(),

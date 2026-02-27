@@ -13,6 +13,7 @@ type ExistingTransaction = {
   kidsCostume: number;
   tube: number;
   locker: number;
+  lockerNumbers?: string | null;
   subtotal: number;
   advance: number;
   status: string;
@@ -54,6 +55,7 @@ export default function Home() {
   const [dress, setDress] = useState(0);
   const [tube, setTube] = useState(0);
   const [locker, setLocker] = useState(0);
+  const [lockerNumbers, setLockerNumbers] = useState('');
   const [currentTime, setCurrentTime] = useState('');
   const [currentDate, setCurrentDate] = useState('');
   const [isAndroidWebView, setIsAndroidWebView] = useState(false);
@@ -110,12 +112,13 @@ export default function Home() {
   // Restore state from URL params (when coming back from checkout)
   useEffect(() => {
     if (router.isReady) {
-      const { name: qName, phone: qPhone, male, tube: qTube, locker: qLocker } = router.query;
+      const { name: qName, phone: qPhone, male, tube: qTube, locker: qLocker, lockerNumbers: qLockerNumbers } = router.query;
       if (qName) setName(qName as string);
       if (qPhone) setPhone(qPhone as string);
       if (male) setDress(parseInt(male as string) || 0);
       if (qTube) setTube(parseInt(qTube as string) || 0);
       if (qLocker) setLocker(parseInt(qLocker as string) || 0);
+      if (qLockerNumbers) setLockerNumbers(qLockerNumbers as string);
     }
   }, [router.isReady, router.query]);
 
@@ -387,9 +390,17 @@ export default function Home() {
       alert('Please select at least one item');
       return;
     }
+    if (locker > 0 && !lockerNumbers.trim()) {
+      alert('Please enter locker number(s)');
+      return;
+    }
 
     // Build checkout URL with optional parentTransactionId for linked transactions
     let checkoutUrl = `/checkout?name=${encodeURIComponent(name)}&phone=${encodeURIComponent(phone)}&male=${dress}&tube=${tube}&locker=${locker}`;
+
+    if (locker > 0 && lockerNumbers.trim()) {
+      checkoutUrl += `&lockerNumbers=${encodeURIComponent(lockerNumbers)}`;
+    }
 
     if (isLinking && existingTransaction) {
       checkoutUrl += `&parentId=${existingTransaction.id}&parentAdvance=${existingTransaction.advance}`;
@@ -559,7 +570,7 @@ export default function Home() {
                 <div className="text-xs text-gray-500 flex flex-wrap gap-2">
                   {getDressCount(existingTransaction) > 0 && <span>Dress: {getDressCount(existingTransaction)}</span>}
                   {existingTransaction.tube > 0 && <span>Tube: {existingTransaction.tube}</span>}
-                  {existingTransaction.locker > 0 && <span>Locker: {existingTransaction.locker}</span>}
+                  {existingTransaction.locker > 0 && <span>Locker: {existingTransaction.locker}{existingTransaction.lockerNumbers ? ` (${existingTransaction.lockerNumbers})` : ''}</span>}
                 </div>
                 {existingTransaction.linkedTransaction && (
                   <div className="mt-2 pt-2 border-t border-gray-100">
@@ -625,11 +636,23 @@ export default function Home() {
             <h2 className="text-lg font-semibold text-gray-800 mb-4">Locker</h2>
             <div className="flex justify-center">
               <div className="flex items-center">
-                <button type="button" className={btnMinus} onClick={() => setLocker(Math.max(0, locker - 1))}>−</button>
+                <button type="button" className={btnMinus} onClick={() => { setLocker(Math.max(0, locker - 1)); if (locker - 1 <= 0) setLockerNumbers(''); }}>−</button>
                 <div className={counterDisplay}>{locker}</div>
                 <button type="button" className={btnPlus} onClick={() => setLocker(locker + 1)}>+</button>
               </div>
             </div>
+            {locker > 0 && (
+              <div className="mt-4">
+                <label className="block text-gray-600 text-sm mb-1">Locker Number(s)</label>
+                <input
+                  type="text"
+                  placeholder="Enter locker number(s)"
+                  value={lockerNumbers}
+                  onChange={(e) => setLockerNumbers(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
+                />
+              </div>
+            )}
           </div>
         </main>
 

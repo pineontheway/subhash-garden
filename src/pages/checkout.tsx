@@ -29,6 +29,7 @@ type ReceiptData = {
   paymentMethod?: 'upi' | 'cash' | 'split';
   splitCash?: number;
   splitUpi?: number;
+  lockerNumbers?: string;
 };
 
 export default function Checkout() {
@@ -49,6 +50,7 @@ export default function Checkout() {
     dress: 0,
     tube: 0,
     locker: 0,
+    lockerNumbers: '',
   });
   const [isVIP, setIsVIP] = useState(false);
 
@@ -103,13 +105,14 @@ export default function Checkout() {
   // Parse items from URL
   useEffect(() => {
     if (router.isReady && Object.keys(prices).length > 0) {
-      const { name, phone, male, tube, locker, parentId, parentAdvance: pAdvance } = router.query;
+      const { name, phone, male, tube, locker, lockerNumbers, parentId, parentAdvance: pAdvance } = router.query;
       const parsedItems = {
         name: (name as string) || '',
         phone: (phone as string) || '',
         dress: parseInt(male as string) || 0,
         tube: parseInt(tube as string) || 0,
         locker: parseInt(locker as string) || 0,
+        lockerNumbers: (lockerNumbers as string) || '',
       };
       setItems(parsedItems);
 
@@ -159,7 +162,7 @@ export default function Checkout() {
   }
   if (items.locker > 0) {
     lineItems.push({
-      label: 'Locker',
+      label: items.lockerNumbers ? `Locker (${items.lockerNumbers})` : 'Locker',
       qty: items.locker,
       price: items.locker * (prices.locker || 0),
     });
@@ -248,6 +251,7 @@ export default function Checkout() {
           kidsCostume: 0,
           tube: items.tube,
           locker: items.locker,
+          lockerNumbers: items.lockerNumbers || null,
           subtotal,
           advance: isLinked ? 0 : advance,
           totalDue: finalTotalDue,
@@ -282,6 +286,7 @@ export default function Checkout() {
           paymentMethod: isLinked ? undefined : paymentMethod,
           splitCash: paymentMethod === 'split' ? splitCash : undefined,
           splitUpi: paymentMethod === 'split' ? splitUpi : undefined,
+          lockerNumbers: items.lockerNumbers || undefined,
         });
         setShowQRModal(false);
         setShowReceipt(true);
@@ -329,6 +334,9 @@ export default function Checkout() {
         const priceLine = `Rs.${item.price.toFixed(2)}`;
         lines.push(`${itemLine.padEnd(W - priceLine.length)}${priceLine}`);
       });
+      if (receiptData.lockerNumbers) {
+        lines.push(`  Locker #: ${receiptData.lockerNumbers}`);
+      }
 
       lines.push(divider);
 
@@ -397,7 +405,7 @@ export default function Checkout() {
         <header className="flex items-center gap-3 px-5 py-4 border-b border-gray-100 print:hidden">
           <button
             type="button"
-            onClick={() => router.push(`/?name=${encodeURIComponent(items.name)}&phone=${encodeURIComponent(items.phone)}&male=${items.dress}&tube=${items.tube}&locker=${items.locker}`)}
+            onClick={() => router.push(`/?name=${encodeURIComponent(items.name)}&phone=${encodeURIComponent(items.phone)}&male=${items.dress}&tube=${items.tube}&locker=${items.locker}${items.lockerNumbers ? `&lockerNumbers=${encodeURIComponent(items.lockerNumbers)}` : ''}`)}
             className="flex items-center gap-2 text-gray-600 hover:text-gray-800 cursor-pointer"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

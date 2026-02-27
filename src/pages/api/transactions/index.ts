@@ -38,6 +38,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         kidsCostume,
         tube,
         locker,
+        lockerNumbers,
         subtotal,
         advance,
         totalDue,
@@ -96,6 +97,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         kidsCostume: kidsCostume || 0,
         tube: tube || 0,
         locker: locker || 0,
+        lockerNumbers: lockerNumbers || null,
         subtotal,
         advance: parentTransactionId ? 0 : advance, // Linked transactions have no advance
         totalDue: parentTransactionId ? subtotal : totalDue, // For linked, totalDue = subtotal (the credit amount)
