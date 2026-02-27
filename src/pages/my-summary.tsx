@@ -30,8 +30,7 @@ type TicketTransaction = {
   id: string;
   customerName: string;
   customerPhone: string;
-  // vehicleNumber disabled per user request
-  // vehicleNumber: string | null;
+  vehicleType: string | null;
   menTicket: number;
   womenTicket: number;
   childTicket: number;
@@ -166,6 +165,17 @@ export default function MySummary() {
   const ticketCashAmount = ticketTransactions.filter(t => t.paymentMethod === 'cash').reduce((sum, t) => sum + t.totalDue, 0);
   const ticketUpiAmount = ticketTransactions.filter(t => t.paymentMethod === 'upi').reduce((sum, t) => sum + t.totalDue, 0);
 
+  // Vehicle type stats
+  const vehicleTypeCounts = ticketTransactions.reduce((acc, t) => {
+    const type = t.vehicleType || 'unknown';
+    acc[type] = (acc[type] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+  const vehicleTypeLabels: Record<string, string> = {
+    'walk-in': 'Walk-in', 'bike': 'Bike', 'auto': 'Auto',
+    'car': 'Car', 'bus': 'Bus', 'school-bus': 'School Bus', 'unknown': 'Unknown',
+  };
+
   if (status === 'loading' || loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -258,6 +268,23 @@ export default function MySummary() {
                 </div>
               </div>
 
+              {/* Vehicle Type Stats */}
+              {Object.keys(vehicleTypeCounts).filter(t => t !== 'unknown').length > 0 && (
+                <div className="bg-white rounded-2xl p-4 shadow-[0_4px_20px_rgba(0,0,0,0.08)] mb-4">
+                  <p className="text-sm font-medium text-gray-800 mb-3">Vehicle Types</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {['walk-in', 'bike', 'auto', 'car', 'bus', 'school-bus']
+                      .filter(type => vehicleTypeCounts[type] > 0)
+                      .map(type => (
+                        <div key={type} className="bg-gray-50 rounded-xl p-3 text-center">
+                          <p className="text-xl font-bold text-gray-700">{vehicleTypeCounts[type]}</p>
+                          <p className="text-xs text-gray-600">{vehicleTypeLabels[type]}</p>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+
               {/* Cash to Hand Over */}
               <div className="bg-blue-600 rounded-xl p-5 mb-6 text-white text-center">
                 <p className="text-sm opacity-90 mb-1">Cash to Hand Over</p>
@@ -290,10 +317,9 @@ export default function MySummary() {
                             </span>
                           </div>
                           <p className="text-sm text-gray-500">+91 {transaction.customerPhone}</p>
-                          {/* Vehicle number disabled per user request */}
-                          {/* {transaction.vehicleNumber && (
-                            <p className="text-xs text-gray-400">{transaction.vehicleNumber}</p>
-                          )} */}
+                          {transaction.vehicleType && (
+                            <p className="text-xs text-gray-400 capitalize">{transaction.vehicleType === 'school-bus' ? 'School Bus' : transaction.vehicleType === 'walk-in' ? 'Walk-in' : transaction.vehicleType}</p>
+                          )}
                         </div>
                         <div className="text-right">
                           <p className={`font-semibold ${transaction.isComplimentary ? 'text-purple-600' : 'text-blue-600'}`}>

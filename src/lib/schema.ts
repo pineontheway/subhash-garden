@@ -37,7 +37,7 @@ export const ticketTransactions = sqliteTable('ticket_transactions', {
   id: text('id').primaryKey(),
   customerName: text('customer_name').notNull(),
   customerPhone: text('customer_phone').notNull(),
-  vehicleNumber: text('vehicle_number'), // Optional - car/bike number
+  vehicleType: text('vehicle_number'), // Repurposed: was vehicleNumber, now stores vehicle type (walk-in, bike, auto, car, bus, school-bus)
   menTicket: integer('men_ticket').default(0).notNull(),
   womenTicket: integer('women_ticket').default(0).notNull(),
   childTicket: integer('child_ticket').default(0).notNull(),

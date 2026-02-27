@@ -8,8 +8,7 @@ export default function TicketCounter() {
   const { data: session, status } = useSession();
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
-  // Vehicle number disabled per user request
-  // const [vehicleNumber, setVehicleNumber] = useState('');
+  const [vehicleType, setVehicleType] = useState('');
   const [menTicket, setMenTicket] = useState(0);
   const [womenTicket, setWomenTicket] = useState(0);
   const [childTicket, setChildTicket] = useState(0);
@@ -52,11 +51,10 @@ export default function TicketCounter() {
   // Restore state from URL params (when coming back from checkout)
   useEffect(() => {
     if (router.isReady) {
-      const { name: qName, phone: qPhone, vehicle, men, women, child } = router.query;
+      const { name: qName, phone: qPhone, vehicleType: qVehicleType, men, women, child } = router.query;
       if (qName) setName(qName as string);
       if (qPhone) setPhone(qPhone as string);
-      // Vehicle number disabled per user request
-      // if (vehicle) setVehicleNumber(vehicle as string);
+      if (qVehicleType) setVehicleType(qVehicleType as string);
       if (men) setMenTicket(parseInt(men as string) || 0);
       if (women) setWomenTicket(parseInt(women as string) || 0);
       if (child) setChildTicket(parseInt(child as string) || 0);
@@ -116,6 +114,10 @@ export default function TicketCounter() {
     //   alert('Please enter a valid 10-digit Indian mobile number');
     //   return;
     // }
+    if (!vehicleType) {
+      alert('Please select a vehicle type');
+      return;
+    }
     if (totalTickets === 0) {
       alert('Please select at least one ticket');
       return;
@@ -123,15 +125,12 @@ export default function TicketCounter() {
     const params = new URLSearchParams({
       name,
       phone,
+      vehicleType,
       men: menTicket.toString(),
       women: womenTicket.toString(),
       child: childTicket.toString(),
       tags: assignedTags.join(','),
     });
-    // Vehicle number disabled per user request
-    // if (vehicleNumber.trim()) {
-    //   params.set('vehicle', vehicleNumber.trim());
-    // }
     router.push(`/ticket-counter/checkout?${params.toString()}`);
   };
 
@@ -273,17 +272,23 @@ export default function TicketCounter() {
             </div>
           </div>
 
-          {/* Vehicle Number Input - disabled per user request */}
-          {/* <div>
-            <label className="block text-gray-700 mb-2">Vehicle Number <span className="text-gray-400 text-sm">(Optional)</span></label>
-            <input
-              type="text"
-              placeholder="e.g., KA 01 AB 1234"
-              value={vehicleNumber}
-              onChange={(e) => setVehicleNumber(e.target.value.toUpperCase())}
-              className="w-full px-4 py-3 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div> */}
+          {/* Vehicle Type Dropdown */}
+          <div>
+            <label className="block text-gray-700 mb-2">Vehicle Type</label>
+            <select
+              value={vehicleType}
+              onChange={(e) => setVehicleType(e.target.value)}
+              className={`w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white ${vehicleType ? 'text-gray-900' : 'text-gray-400'}`}
+            >
+              <option value="" disabled>Select vehicle type</option>
+              <option value="walk-in">Walk-in</option>
+              <option value="bike">Bike</option>
+              <option value="auto">Auto</option>
+              <option value="car">Car</option>
+              <option value="bus">Bus</option>
+              <option value="school-bus">School Bus</option>
+            </select>
+          </div>
 
           {/* Tickets Card */}
           <div className="bg-white rounded-2xl p-5 shadow-[0_4px_20px_rgba(0,0,0,0.08)]">

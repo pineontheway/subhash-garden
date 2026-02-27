@@ -16,8 +16,7 @@ type ReceiptData = {
   timestamp: string;
   customerName: string;
   customerPhone: string;
-  // vehicleNumber disabled per user request
-  // vehicleNumber?: string;
+  vehicleType?: string;
   tagNumbers?: string[];
   cashierName: string;
   lineItems: { label: string; qty: number; price: number }[];
@@ -42,8 +41,7 @@ export default function TicketCheckout() {
   const [items, setItems] = useState({
     name: '',
     phone: '',
-    // vehicleNumber disabled per user request
-    // vehicleNumber: '',
+    vehicleType: '',
     tagNumbers: '',
     menTicket: 0,
     womenTicket: 0,
@@ -118,12 +116,11 @@ export default function TicketCheckout() {
   // Parse items from URL
   useEffect(() => {
     if (router.isReady && Object.keys(prices).length > 0) {
-      const { name, phone, vehicle, tags, men, women, child } = router.query;
+      const { name, phone, vehicleType: qVehicleType, tags, men, women, child } = router.query;
       const parsedItems = {
         name: (name as string) || '',
         phone: (phone as string) || '',
-        // vehicleNumber disabled per user request
-        // vehicleNumber: (vehicle as string) || '',
+        vehicleType: (qVehicleType as string) || '',
         tagNumbers: (tags as string) || '',
         menTicket: parseInt(men as string) || 0,
         womenTicket: parseInt(women as string) || 0,
@@ -220,8 +217,7 @@ export default function TicketCheckout() {
         body: JSON.stringify({
           customerName: items.name,
           customerPhone: items.phone,
-          // vehicleNumber disabled per user request
-          // vehicleNumber: items.vehicleNumber || null,
+          vehicleType: items.vehicleType || null,
           tagNumbers: items.tagNumbers || null,
           menTicket: items.menTicket,
           womenTicket: items.womenTicket,
@@ -245,8 +241,7 @@ export default function TicketCheckout() {
           }),
           customerName: items.name,
           customerPhone: items.phone,
-          // vehicleNumber disabled per user request
-          // vehicleNumber: items.vehicleNumber,
+          vehicleType: items.vehicleType || undefined,
           tagNumbers: items.tagNumbers ? items.tagNumbers.split(',').map(t => t.trim()) : undefined,
           cashierName: session?.user?.name || 'Unknown',
           lineItems,
@@ -299,10 +294,13 @@ export default function TicketCheckout() {
       lines.push('');
       lines.push(`Customer: ${receiptData.customerName}`);
       lines.push(`Phone: +91 ${receiptData.customerPhone}`);
-      // Vehicle number disabled per user request
-      // if (receiptData.vehicleNumber) {
-      //   lines.push(`Vehicle: ${receiptData.vehicleNumber}`);
-      // }
+      if (receiptData.vehicleType) {
+        const vehicleLabels: Record<string, string> = {
+          'walk-in': 'Walk-in', 'bike': 'Bike', 'auto': 'Auto',
+          'car': 'Car', 'bus': 'Bus', 'school-bus': 'School Bus',
+        };
+        lines.push(`Vehicle Type: ${vehicleLabels[receiptData.vehicleType] || receiptData.vehicleType}`);
+      }
       if (receiptData.tagNumbers && receiptData.tagNumbers.length > 0) {
         lines.push(`Tags: ${receiptData.tagNumbers.join(', ')}`);
       }
@@ -366,10 +364,9 @@ export default function TicketCheckout() {
       women: items.womenTicket.toString(),
       child: items.childTicket.toString(),
     });
-    // Vehicle number disabled per user request
-    // if (items.vehicleNumber) {
-    //   params.set('vehicle', items.vehicleNumber);
-    // }
+    if (items.vehicleType) {
+      params.set('vehicleType', items.vehicleType);
+    }
     if (items.tagNumbers) {
       params.set('tags', items.tagNumbers);
     }
@@ -433,13 +430,12 @@ export default function TicketCheckout() {
               <span className="text-gray-600">Phone Number</span>
               <span className="text-gray-900 font-medium">+91 {items.phone}</span>
             </div>
-            {/* Vehicle number disabled per user request */}
-            {/* {items.vehicleNumber && (
+            {items.vehicleType && (
               <div className="flex items-center justify-between py-2 border-b border-gray-100">
-                <span className="text-gray-600">Vehicle Number</span>
-                <span className="text-gray-900 font-medium">{items.vehicleNumber}</span>
+                <span className="text-gray-600">Vehicle Type</span>
+                <span className="text-gray-900 font-medium capitalize">{items.vehicleType === 'school-bus' ? 'School Bus' : items.vehicleType === 'walk-in' ? 'Walk-in' : items.vehicleType}</span>
               </div>
-            )} */}
+            )}
             {items.tagNumbers && (
               <div className="py-2">
                 <span className="text-gray-600 block mb-1">Tag Numbers</span>
@@ -827,13 +823,12 @@ export default function TicketCheckout() {
                   <span>Phone:</span>
                   <span>+91 {receiptData.customerPhone}</span>
                 </div>
-                {/* Vehicle number disabled per user request */}
-                {/* {receiptData.vehicleNumber && (
+                {receiptData.vehicleType && (
                   <div className="flex justify-between">
                     <span>Vehicle:</span>
-                    <span>{receiptData.vehicleNumber}</span>
+                    <span className="capitalize">{receiptData.vehicleType === 'school-bus' ? 'School Bus' : receiptData.vehicleType === 'walk-in' ? 'Walk-in' : receiptData.vehicleType}</span>
                   </div>
-                )} */}
+                )}
                 {receiptData.tagNumbers && receiptData.tagNumbers.length > 0 && (
                   <div className="pt-1">
                     <span className="block mb-1">Tag Numbers:</span>

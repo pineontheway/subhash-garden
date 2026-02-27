@@ -33,8 +33,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const {
         customerName,
         customerPhone,
-        // vehicleNumber disabled per user request
-        // vehicleNumber,
+        vehicleType,
         menTicket,
         womenTicket,
         childTicket,
@@ -62,8 +61,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         id: randomUUID(),
         customerName,
         customerPhone,
-        // vehicleNumber disabled per user request
-        vehicleNumber: null,
+        vehicleType: vehicleType || null,
         menTicket: menTicket || 0,
         womenTicket: womenTicket || 0,
         childTicket: childTicket || 0,

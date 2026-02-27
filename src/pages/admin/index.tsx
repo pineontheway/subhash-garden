@@ -48,8 +48,7 @@ type TicketTransaction = {
   id: string;
   customerName: string;
   customerPhone: string;
-  // vehicleNumber disabled per user request
-  // vehicleNumber: string | null;
+  vehicleType: string | null;
   menTicket: number;
   womenTicket: number;
   childTicket: number;
@@ -1464,10 +1463,9 @@ export default function AdminDashboard() {
                                     </span>
                                   </div>
                                   <p className="text-sm text-gray-500">+91 {transaction.customerPhone}</p>
-                                  {/* Vehicle number disabled per user request */}
-                                  {/* {transaction.vehicleNumber && (
-                                    <p className="text-xs text-gray-400">{transaction.vehicleNumber}</p>
-                                  )} */}
+                                  {transaction.vehicleType && (
+                                    <p className="text-xs text-gray-400 capitalize">{transaction.vehicleType === 'school-bus' ? 'School Bus' : transaction.vehicleType === 'walk-in' ? 'Walk-in' : transaction.vehicleType}</p>
+                                  )}
                                 </div>
                                 <div className="text-right">
                                   <p className="font-semibold text-blue-600">
