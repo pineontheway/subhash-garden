@@ -283,7 +283,7 @@ export default function TicketCheckout() {
       const lines: string[] = [];
 
       lines.push('<center><big>Subhash Garden</big></center>');
-      lines.push('<center>Entry Ticket</center>');
+      lines.push('<center>Entry Ticket Invoice</center>');
       lines.push('<center>GSTIN: 36AJBPK1262EIZO</center>');
       lines.push('');
       lines.push(blackBar);
@@ -302,7 +302,7 @@ export default function TicketCheckout() {
         lines.push(`Vehicle Type: ${vehicleLabels[receiptData.vehicleType] || receiptData.vehicleType}`);
       }
       if (receiptData.tagNumbers && receiptData.tagNumbers.length > 0) {
-        lines.push(`Tags: ${receiptData.tagNumbers.join(', ')}`);
+        lines.push(`Tag Numbers: ${receiptData.tagNumbers.join(', ')}`);
       }
       lines.push(divider);
       lines.push('');
@@ -543,8 +543,8 @@ export default function TicketCheckout() {
                   type="button"
                   onClick={() => {
                     setPaymentMethod('split');
-                    setSplitUpi(Math.floor(totalDue / 2));
-                    setSplitCash(totalDue - Math.floor(totalDue / 2));
+                    setSplitUpi(0);
+                    setSplitCash(0);
                   }}
                   className={`flex-1 py-2 px-3 rounded-lg font-medium transition-colors cursor-pointer ${
                     paymentMethod === 'split'

@@ -636,9 +636,8 @@ export default function Checkout() {
                   type="button"
                   onClick={() => {
                     setPaymentMethod('split');
-                    const amountToPay = isVIP ? advance : totalDue;
-                    setSplitUpi(Math.floor(amountToPay / 2));
-                    setSplitCash(amountToPay - Math.floor(amountToPay / 2));
+                    setSplitUpi(0);
+                    setSplitCash(0);
                   }}
                   className={`flex-1 py-2 px-3 rounded-lg font-medium transition-colors cursor-pointer ${
                     paymentMethod === 'split'
