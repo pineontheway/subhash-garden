@@ -46,9 +46,7 @@ export default function Checkout() {
   const [items, setItems] = useState({
     name: '',
     phone: '',
-    maleCostume: 0,
-    femaleCostume: 0,
-    kidsCostume: 0,
+    dress: 0,
     tube: 0,
     locker: 0,
   });
@@ -105,13 +103,11 @@ export default function Checkout() {
   // Parse items from URL
   useEffect(() => {
     if (router.isReady && Object.keys(prices).length > 0) {
-      const { name, phone, male, female, kids, tube, locker, parentId, parentAdvance: pAdvance } = router.query;
+      const { name, phone, male, tube, locker, parentId, parentAdvance: pAdvance } = router.query;
       const parsedItems = {
         name: (name as string) || '',
         phone: (phone as string) || '',
-        maleCostume: parseInt(male as string) || 0,
-        femaleCostume: parseInt(female as string) || 0,
-        kidsCostume: parseInt(kids as string) || 0,
+        dress: parseInt(male as string) || 0,
         tube: parseInt(tube as string) || 0,
         locker: parseInt(locker as string) || 0,
       };
@@ -125,9 +121,7 @@ export default function Checkout() {
       } else {
         // Calculate subtotal and set as default advance
         const subtotal =
-          parsedItems.maleCostume * (prices.male_costume || 0) +
-          parsedItems.femaleCostume * (prices.female_costume || 0) +
-          parsedItems.kidsCostume * (prices.kids_costume || 0) +
+          parsedItems.dress * (prices.male_costume || 0) +
           parsedItems.tube * (prices.tube || 0) +
           parsedItems.locker * (prices.locker || 0);
         setAdvance(subtotal);
@@ -136,9 +130,7 @@ export default function Checkout() {
   }, [router.isReady, router.query, prices]);
 
   const subtotal =
-    items.maleCostume * (prices.male_costume || 0) +
-    items.femaleCostume * (prices.female_costume || 0) +
-    items.kidsCostume * (prices.kids_costume || 0) +
+    items.dress * (prices.male_costume || 0) +
     items.tube * (prices.tube || 0) +
     items.locker * (prices.locker || 0);
 
@@ -151,25 +143,11 @@ export default function Checkout() {
 
   // Build line items array for display
   const lineItems: { label: string; qty: number; price: number }[] = [];
-  if (items.maleCostume > 0) {
+  if (items.dress > 0) {
     lineItems.push({
-      label: 'Male Costume',
-      qty: items.maleCostume,
-      price: items.maleCostume * (prices.male_costume || 0),
-    });
-  }
-  if (items.femaleCostume > 0) {
-    lineItems.push({
-      label: 'Female Costume',
-      qty: items.femaleCostume,
-      price: items.femaleCostume * (prices.female_costume || 0),
-    });
-  }
-  if (items.kidsCostume > 0) {
-    lineItems.push({
-      label: 'Kids Costume',
-      qty: items.kidsCostume,
-      price: items.kidsCostume * (prices.kids_costume || 0),
+      label: 'Dress',
+      qty: items.dress,
+      price: items.dress * (prices.male_costume || 0),
     });
   }
   if (items.tube > 0) {
@@ -265,9 +243,9 @@ export default function Checkout() {
         body: JSON.stringify({
           customerName: items.name,
           customerPhone: items.phone,
-          maleCostume: items.maleCostume,
-          femaleCostume: items.femaleCostume,
-          kidsCostume: items.kidsCostume,
+          maleCostume: items.dress,
+          femaleCostume: 0,
+          kidsCostume: 0,
           tube: items.tube,
           locker: items.locker,
           subtotal,
@@ -419,7 +397,7 @@ export default function Checkout() {
         <header className="flex items-center gap-3 px-5 py-4 border-b border-gray-100 print:hidden">
           <button
             type="button"
-            onClick={() => router.push(`/?name=${encodeURIComponent(items.name)}&phone=${encodeURIComponent(items.phone)}&male=${items.maleCostume}&female=${items.femaleCostume}&kids=${items.kidsCostume}&tube=${items.tube}&locker=${items.locker}`)}
+            onClick={() => router.push(`/?name=${encodeURIComponent(items.name)}&phone=${encodeURIComponent(items.phone)}&male=${items.dress}&tube=${items.tube}&locker=${items.locker}`)}
             className="flex items-center gap-2 text-gray-600 hover:text-gray-800 cursor-pointer"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

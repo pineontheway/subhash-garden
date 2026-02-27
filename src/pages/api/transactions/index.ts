@@ -165,16 +165,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       // Validate that quantities match the original transaction
-      const itemTypeToField: Record<string, keyof typeof transaction> = {
-        maleCostume: 'maleCostume',
-        femaleCostume: 'femaleCostume',
-        kidsCostume: 'kidsCostume',
-        tube: 'tube',
-        locker: 'locker',
+      // Helper: get original quantity for an item type, supporting both new 'dress' type
+      // (which sums maleCostume + femaleCostume + kidsCostume for backward compat) and legacy types
+      const getOriginalQty = (t: typeof transaction, type: string): number => {
+        if (type === 'dress') {
+          return t.maleCostume + t.femaleCostume + t.kidsCostume;
+        }
+        const fieldMap: Record<string, keyof typeof t> = {
+          maleCostume: 'maleCostume',
+          femaleCostume: 'femaleCostume',
+          kidsCostume: 'kidsCostume',
+          tube: 'tube',
+          locker: 'locker',
+        };
+        return (t[fieldMap[type]] as number) || 0;
       };
 
       for (const item of returnDetails.items) {
-        const originalQty = transaction[itemTypeToField[item.type]] as number;
+        const originalQty = getOriginalQty(transaction, item.type);
         const totalReturned = item.returnedGood + item.returnedDamaged + item.lost;
 
         if (totalReturned !== originalQty) {
@@ -195,7 +203,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       let linkedDeduction = 0;
       if (linkedChild && linkedReturnDetails) {
         for (const item of linkedReturnDetails.items) {
-          const originalQty = linkedChild[itemTypeToField[item.type]] as number;
+          const originalQty = getOriginalQty(linkedChild, item.type);
           const totalReturned = item.returnedGood + item.returnedDamaged + item.lost;
 
           if (totalReturned !== originalQty) {

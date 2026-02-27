@@ -28,12 +28,13 @@ type ItemReturnState = {
   lost: number;
 };
 
-const ITEM_CONFIG: { type: ItemType; label: string; field: keyof Transaction; priceKey: string }[] = [
-  { type: 'maleCostume', label: 'Male Costume', field: 'maleCostume', priceKey: 'male_costume' },
-  { type: 'femaleCostume', label: 'Female Costume', field: 'femaleCostume', priceKey: 'female_costume' },
-  { type: 'kidsCostume', label: 'Kids Costume', field: 'kidsCostume', priceKey: 'kids_costume' },
-  { type: 'tube', label: 'Tube', field: 'tube', priceKey: 'tube' },
-  { type: 'locker', label: 'Locker', field: 'locker', priceKey: 'locker' },
+// Helper: sum all costume columns into single dress count (backward compat with old transactions)
+const getDressCount = (t: Transaction) => t.maleCostume + t.femaleCostume + t.kidsCostume;
+
+const ITEM_CONFIG: { type: ItemType; label: string; getGiven: (t: Transaction) => number; priceKey: string }[] = [
+  { type: 'dress', label: 'Dress', getGiven: getDressCount, priceKey: 'male_costume' },
+  { type: 'tube', label: 'Tube', getGiven: (t) => t.tube, priceKey: 'tube' },
+  { type: 'locker', label: 'Locker', getGiven: (t) => t.locker, priceKey: 'locker' },
 ];
 
 export default function ReturnAdvance() {
@@ -53,16 +54,12 @@ export default function ReturnAdvance() {
 
   // Item return tracking state - simplified to just track lost items
   const [itemReturns, setItemReturns] = useState<Record<ItemType, ItemReturnState>>({
-    maleCostume: { lost: 0 },
-    femaleCostume: { lost: 0 },
-    kidsCostume: { lost: 0 },
+    dress: { lost: 0 },
     tube: { lost: 0 },
     locker: { lost: 0 },
   });
   const [linkedItemReturns, setLinkedItemReturns] = useState<Record<ItemType, ItemReturnState>>({
-    maleCostume: { lost: 0 },
-    femaleCostume: { lost: 0 },
-    kidsCostume: { lost: 0 },
+    dress: { lost: 0 },
     tube: { lost: 0 },
     locker: { lost: 0 },
   });
@@ -92,9 +89,7 @@ export default function ReturnAdvance() {
   useEffect(() => {
     if (selectedTransaction) {
       const initialState: Record<ItemType, ItemReturnState> = {
-        maleCostume: { lost: 0 },
-        femaleCostume: { lost: 0 },
-        kidsCostume: { lost: 0 },
+        dress: { lost: 0 },
         tube: { lost: 0 },
         locker: { lost: 0 },
       };
@@ -146,8 +141,8 @@ export default function ReturnAdvance() {
     const errors: string[] = [];
 
     // Validate parent items
-    ITEM_CONFIG.forEach(({ type, label, field }) => {
-      const given = selectedTransaction[field] as number;
+    ITEM_CONFIG.forEach(({ type, label, getGiven }) => {
+      const given = getGiven(selectedTransaction);
       if (given === 0) return;
 
       const lost = itemReturns[type].lost;
@@ -159,8 +154,8 @@ export default function ReturnAdvance() {
     // Validate linked items
     if (selectedTransaction.linkedTransaction) {
       const linked = selectedTransaction.linkedTransaction;
-      ITEM_CONFIG.forEach(({ type, label, field }) => {
-        const given = linked[field] as number;
+      ITEM_CONFIG.forEach(({ type, label, getGiven }) => {
+        const given = getGiven(linked);
         if (given === 0) return;
 
         const lost = linkedItemReturns[type].lost;
@@ -226,9 +221,9 @@ export default function ReturnAdvance() {
     try {
       // Build return details for parent (same deduction logic for VIP and regular)
       const items: ItemReturnEntry[] = ITEM_CONFIG
-        .filter(({ field }) => (selectedTransaction[field] as number) > 0)
-        .map(({ type, field, priceKey }) => {
-          const given = selectedTransaction[field] as number;
+        .filter(({ getGiven }) => getGiven(selectedTransaction) > 0)
+        .map(({ type, getGiven, priceKey }) => {
+          const given = getGiven(selectedTransaction);
           const lost = itemReturns[type].lost;
           const returned = given - lost;
           const price = prices[priceKey] || 0;
@@ -253,9 +248,9 @@ export default function ReturnAdvance() {
       if (selectedTransaction.linkedTransaction) {
         const linked = selectedTransaction.linkedTransaction;
         const linkedItems: ItemReturnEntry[] = ITEM_CONFIG
-          .filter(({ field }) => (linked[field] as number) > 0)
-          .map(({ type, field, priceKey }) => {
-            const given = linked[field] as number;
+          .filter(({ getGiven }) => getGiven(linked) > 0)
+          .map(({ type, getGiven, priceKey }) => {
+            const given = getGiven(linked);
             const lost = linkedItemReturns[type].lost;
             const returned = given - lost;
             const price = prices[priceKey] || 0;
@@ -530,8 +525,8 @@ export default function ReturnAdvance() {
                   {selectedTransaction.linkedTransaction ? 'Parent Items:' : 'Items to Collect:'}
                 </p>
                 <div className="space-y-3">
-                  {ITEM_CONFIG.map(({ type, label, field, priceKey }) => {
-                    const given = selectedTransaction[field] as number;
+                  {ITEM_CONFIG.map(({ type, label, getGiven, priceKey }) => {
+                    const given = getGiven(selectedTransaction);
                     if (given === 0) return null;
 
                     const lost = itemReturns[type].lost;
@@ -593,9 +588,9 @@ export default function ReturnAdvance() {
                     </p>
                   </div>
                   <div className="space-y-3 pl-2 border-l-2 border-purple-200">
-                    {ITEM_CONFIG.map(({ type, label, field, priceKey }) => {
+                    {ITEM_CONFIG.map(({ type, label, getGiven, priceKey }) => {
                       const linked = selectedTransaction.linkedTransaction!;
-                      const given = linked[field] as number;
+                      const given = getGiven(linked);
                       if (given === 0) return null;
 
                       const lost = linkedItemReturns[type].lost;

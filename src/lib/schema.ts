@@ -97,7 +97,8 @@ export type TicketTransaction = typeof ticketTransactions.$inferSelect;
 export type NewTicketTransaction = typeof ticketTransactions.$inferInsert;
 
 // Item return tracking types
-export type ItemType = 'maleCostume' | 'femaleCostume' | 'kidsCostume' | 'tube' | 'locker';
+// 'dress' maps to the maleCostume DB field; femaleCostume and kidsCostume are legacy columns kept for backward compat
+export type ItemType = 'dress' | 'tube' | 'locker';
 
 export type ItemReturnEntry = {
   type: ItemType;

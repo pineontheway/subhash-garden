@@ -65,7 +65,7 @@ type TicketTransaction = {
 };
 
 type ItemReturnEntry = {
-  type: 'maleCostume' | 'femaleCostume' | 'kidsCostume' | 'tube' | 'locker';
+  type: 'dress' | 'maleCostume' | 'femaleCostume' | 'kidsCostume' | 'tube' | 'locker';
   rented: number;
   returnedGood: number;
   returnedDamaged: number;
@@ -482,11 +482,11 @@ export default function AdminDashboard() {
     return Object.values(settlementMap);
   })();
 
-  // Calculate damage analytics
+  // Calculate damage analytics (consolidate all costume types into 'dress')
   const damageAnalytics = (() => {
     let totalDeductions = 0;
-    let damagedItems = { maleCostume: 0, femaleCostume: 0, kidsCostume: 0, tube: 0, locker: 0 };
-    let lostItems = { maleCostume: 0, femaleCostume: 0, kidsCostume: 0, tube: 0, locker: 0 };
+    let damagedItems = { dress: 0, tube: 0, locker: 0 };
+    let lostItems = { dress: 0, tube: 0, locker: 0 };
     const damageRecords: Array<{
       transactionId: string;
       customerName: string;
@@ -495,6 +495,12 @@ export default function AdminDashboard() {
       totalDeduction: number;
       notes?: string;
     }> = [];
+
+    // Map legacy costume types to 'dress'
+    const mapType = (type: string): 'dress' | 'tube' | 'locker' => {
+      if (type === 'maleCostume' || type === 'femaleCostume' || type === 'kidsCostume' || type === 'dress') return 'dress';
+      return type as 'tube' | 'locker';
+    };
 
     transactions.forEach(t => {
       if (t.returnDetails && t.totalDeduction && t.totalDeduction > 0) {
@@ -506,10 +512,11 @@ export default function AdminDashboard() {
 
           details.items.forEach(item => {
             if (item.returnedDamaged > 0 || item.lost > 0) {
-              damagedItems[item.type] += item.returnedDamaged;
-              lostItems[item.type] += item.lost;
+              const mapped = mapType(item.type);
+              damagedItems[mapped] += item.returnedDamaged;
+              lostItems[mapped] += item.lost;
               itemsWithDamage.push({
-                type: item.type,
+                type: mapped,
                 damaged: item.returnedDamaged,
                 lost: item.lost,
                 deduction: item.deduction,
@@ -544,42 +551,65 @@ export default function AdminDashboard() {
   })();
 
   // Calculate inventory counts (accounting for lost items)
+  // Consolidate maleCostume + femaleCostume + kidsCostume into single 'dress' entry
   const inventoryData = (() => {
-    const itemTypes = ['maleCostume', 'femaleCostume', 'kidsCostume', 'tube', 'locker'] as const;
     const data: Record<string, { givenOut: number; returned: number; lost: number; stillOut: number }> = {};
 
-    itemTypes.forEach(itemType => {
-      const fieldMap: Record<string, keyof Transaction> = {
-        maleCostume: 'maleCostume',
-        femaleCostume: 'femaleCostume',
-        kidsCostume: 'kidsCostume',
-        tube: 'tube',
-        locker: 'locker',
-      };
+    // Map legacy costume types to 'dress'
+    const mapType = (type: string): string => {
+      if (type === 'maleCostume' || type === 'femaleCostume' || type === 'kidsCostume' || type === 'dress') return 'dress';
+      return type;
+    };
 
-      const field = fieldMap[itemType];
+    // Dress: sum all 3 costume columns
+    const costumeFields: (keyof Transaction)[] = ['maleCostume', 'femaleCostume', 'kidsCostume'];
+    const dressGivenOut = inventoryTransactions.reduce((sum, t) => sum + costumeFields.reduce((s, f) => s + (t[f] as number), 0), 0);
+    const dressStillOut = inventoryTransactions.filter(t => t.status === 'active').reduce((sum, t) => sum + costumeFields.reduce((s, f) => s + (t[f] as number), 0), 0);
+
+    let dressReturned = 0;
+    let dressLost = 0;
+    inventoryTransactions.filter(t => t.status === 'advance_returned').forEach(t => {
+      if (t.returnDetails) {
+        try {
+          const details: ReturnDetails = JSON.parse(t.returnDetails);
+          details.items.forEach(item => {
+            const mapped = mapType(item.type);
+            if (mapped === 'dress') {
+              dressReturned += item.returnedGood + item.returnedDamaged;
+              dressLost += item.lost;
+            }
+          });
+        } catch (e) {
+          dressReturned += costumeFields.reduce((s, f) => s + (t[f] as number), 0);
+        }
+      } else {
+        dressReturned += costumeFields.reduce((s, f) => s + (t[f] as number), 0);
+      }
+    });
+    data.dress = { givenOut: dressGivenOut, returned: dressReturned, lost: dressLost, stillOut: dressStillOut };
+
+    // Tube and Locker
+    const simpleItems = ['tube', 'locker'] as const;
+    simpleItems.forEach(itemType => {
+      const field = itemType as keyof Transaction;
       const givenOut = inventoryTransactions.reduce((sum, t) => sum + (t[field] as number), 0);
       const stillOut = inventoryTransactions.filter(t => t.status === 'active').reduce((sum, t) => sum + (t[field] as number), 0);
 
-      // Calculate actual returned and lost from returnDetails
       let actualReturned = 0;
       let lost = 0;
-
       inventoryTransactions.filter(t => t.status === 'advance_returned').forEach(t => {
         if (t.returnDetails) {
           try {
             const details: ReturnDetails = JSON.parse(t.returnDetails);
-            const item = details.items.find(i => i.type === itemType);
+            const item = details.items.find(i => mapType(i.type) === itemType);
             if (item) {
               actualReturned += item.returnedGood + item.returnedDamaged;
               lost += item.lost;
             }
           } catch (e) {
-            // Fallback for old transactions without returnDetails
             actualReturned += t[field] as number;
           }
         } else {
-          // Fallback for old transactions without returnDetails
           actualReturned += t[field] as number;
         }
       });
@@ -590,10 +620,8 @@ export default function AdminDashboard() {
     return data;
   })();
 
-  const totalItemsOut = inventoryData.maleCostume.stillOut + inventoryData.femaleCostume.stillOut +
-    inventoryData.kidsCostume.stillOut + inventoryData.tube.stillOut + inventoryData.locker.stillOut;
-  const totalItemsLost = inventoryData.maleCostume.lost + inventoryData.femaleCostume.lost +
-    inventoryData.kidsCostume.lost + inventoryData.tube.lost + inventoryData.locker.lost;
+  const totalItemsOut = inventoryData.dress.stillOut + inventoryData.tube.stillOut + inventoryData.locker.stillOut;
+  const totalItemsLost = inventoryData.dress.lost + inventoryData.tube.lost + inventoryData.locker.lost;
 
   // Quick date filter helpers
   const setToday = () => {
@@ -1370,9 +1398,7 @@ export default function AdminDashboard() {
                                 const lostCount = damageAnalytics.lostItems[type as keyof typeof damageAnalytics.lostItems];
                                 if (count === 0 && lostCount === 0) return null;
                                 const labelMap: Record<string, string> = {
-                                  maleCostume: 'Male Costume',
-                                  femaleCostume: 'Female Costume',
-                                  kidsCostume: 'Kids Costume',
+                                  dress: 'Dress',
                                   tube: 'Tube',
                                   locker: 'Locker',
                                 };
@@ -1683,47 +1709,17 @@ export default function AdminDashboard() {
                         </thead>
                         <tbody>
                           <tr className="border-t border-gray-100">
-                            <td className="py-3 px-4 text-gray-800">Male Costume</td>
-                            <td className="py-3 px-3 text-center text-blue-600 font-medium">{inventoryData.maleCostume.givenOut}</td>
-                            <td className="py-3 px-3 text-center text-green-600 font-medium">{inventoryData.maleCostume.returned}</td>
+                            <td className="py-3 px-4 text-gray-800">Dress</td>
+                            <td className="py-3 px-3 text-center text-blue-600 font-medium">{inventoryData.dress.givenOut}</td>
+                            <td className="py-3 px-3 text-center text-green-600 font-medium">{inventoryData.dress.returned}</td>
                             <td className="py-3 px-3 text-center">
-                              <span className={`px-2 py-1 rounded-full text-sm font-medium ${inventoryData.maleCostume.lost > 0 ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}`}>
-                                {inventoryData.maleCostume.lost}
+                              <span className={`px-2 py-1 rounded-full text-sm font-medium ${inventoryData.dress.lost > 0 ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}`}>
+                                {inventoryData.dress.lost}
                               </span>
                             </td>
                             <td className="py-3 px-3 text-center">
-                              <span className={`px-2 py-1 rounded-full text-sm font-medium ${inventoryData.maleCostume.stillOut > 0 ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600'}`}>
-                                {inventoryData.maleCostume.stillOut}
-                              </span>
-                            </td>
-                          </tr>
-                          <tr className="border-t border-gray-100">
-                            <td className="py-3 px-4 text-gray-800">Female Costume</td>
-                            <td className="py-3 px-3 text-center text-blue-600 font-medium">{inventoryData.femaleCostume.givenOut}</td>
-                            <td className="py-3 px-3 text-center text-green-600 font-medium">{inventoryData.femaleCostume.returned}</td>
-                            <td className="py-3 px-3 text-center">
-                              <span className={`px-2 py-1 rounded-full text-sm font-medium ${inventoryData.femaleCostume.lost > 0 ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}`}>
-                                {inventoryData.femaleCostume.lost}
-                              </span>
-                            </td>
-                            <td className="py-3 px-3 text-center">
-                              <span className={`px-2 py-1 rounded-full text-sm font-medium ${inventoryData.femaleCostume.stillOut > 0 ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600'}`}>
-                                {inventoryData.femaleCostume.stillOut}
-                              </span>
-                            </td>
-                          </tr>
-                          <tr className="border-t border-gray-100">
-                            <td className="py-3 px-4 text-gray-800">Kids Costume</td>
-                            <td className="py-3 px-3 text-center text-blue-600 font-medium">{inventoryData.kidsCostume.givenOut}</td>
-                            <td className="py-3 px-3 text-center text-green-600 font-medium">{inventoryData.kidsCostume.returned}</td>
-                            <td className="py-3 px-3 text-center">
-                              <span className={`px-2 py-1 rounded-full text-sm font-medium ${inventoryData.kidsCostume.lost > 0 ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}`}>
-                                {inventoryData.kidsCostume.lost}
-                              </span>
-                            </td>
-                            <td className="py-3 px-3 text-center">
-                              <span className={`px-2 py-1 rounded-full text-sm font-medium ${inventoryData.kidsCostume.stillOut > 0 ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600'}`}>
-                                {inventoryData.kidsCostume.stillOut}
+                              <span className={`px-2 py-1 rounded-full text-sm font-medium ${inventoryData.dress.stillOut > 0 ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600'}`}>
+                                {inventoryData.dress.stillOut}
                               </span>
                             </td>
                           </tr>
@@ -1762,10 +1758,10 @@ export default function AdminDashboard() {
                           <tr>
                             <td className="py-3 px-4 font-semibold text-gray-800">Total</td>
                             <td className="py-3 px-3 text-center font-bold text-blue-600">
-                              {inventoryData.maleCostume.givenOut + inventoryData.femaleCostume.givenOut + inventoryData.kidsCostume.givenOut + inventoryData.tube.givenOut + inventoryData.locker.givenOut}
+                              {inventoryData.dress.givenOut + inventoryData.tube.givenOut + inventoryData.locker.givenOut}
                             </td>
                             <td className="py-3 px-3 text-center font-bold text-green-600">
-                              {inventoryData.maleCostume.returned + inventoryData.femaleCostume.returned + inventoryData.kidsCostume.returned + inventoryData.tube.returned + inventoryData.locker.returned}
+                              {inventoryData.dress.returned + inventoryData.tube.returned + inventoryData.locker.returned}
                             </td>
                             <td className="py-3 px-3 text-center">
                               <span className="px-3 py-1 rounded-full text-sm font-bold bg-red-500 text-white">

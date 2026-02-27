@@ -20,6 +20,9 @@ type ExistingTransaction = {
   linkedTransaction?: ExistingTransaction | null;
 };
 
+// Helper: sum all costume columns into single dress count (backward compat)
+const getDressCount = (t: ExistingTransaction) => t.maleCostume + t.femaleCostume + t.kidsCostume;
+
 // Format date in Indian timezone
 const formatIndianDate = () => {
   const options: Intl.DateTimeFormatOptions = {
@@ -48,9 +51,7 @@ export default function Home() {
   const { data: session, status } = useSession();
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
-  const [maleCostume, setMaleCostume] = useState(0);
-  const [femaleCostume, setFemaleCostume] = useState(0);
-  const [kidsCostume, setKidsCostume] = useState(0);
+  const [dress, setDress] = useState(0);
   const [tube, setTube] = useState(0);
   const [locker, setLocker] = useState(0);
   const [currentTime, setCurrentTime] = useState('');
@@ -109,12 +110,10 @@ export default function Home() {
   // Restore state from URL params (when coming back from checkout)
   useEffect(() => {
     if (router.isReady) {
-      const { name: qName, phone: qPhone, male, female, kids, tube: qTube, locker: qLocker } = router.query;
+      const { name: qName, phone: qPhone, male, tube: qTube, locker: qLocker } = router.query;
       if (qName) setName(qName as string);
       if (qPhone) setPhone(qPhone as string);
-      if (male) setMaleCostume(parseInt(male as string) || 0);
-      if (female) setFemaleCostume(parseInt(female as string) || 0);
-      if (kids) setKidsCostume(parseInt(kids as string) || 0);
+      if (male) setDress(parseInt(male as string) || 0);
       if (qTube) setTube(parseInt(qTube as string) || 0);
       if (qLocker) setLocker(parseInt(qLocker as string) || 0);
     }
@@ -322,16 +321,14 @@ export default function Home() {
                 lines.push('Phone: +91 9876543210');
                 lines.push(divider);
                 lines.push('');
-                lines.push('Male Costume x2       Rs.400.00');
-                lines.push('Female Costume x1     Rs.200.00');
-                lines.push('Kids Costume x1       Rs.100.00');
+                lines.push('Dress x3              Rs.600.00');
                 lines.push('Tube x1               Rs.150.00');
                 lines.push('Locker x1             Rs.50.00');
                 lines.push(divider);
-                lines.push('Subtotal:           Rs.900.00');
+                lines.push('Subtotal:           Rs.800.00');
                 lines.push('Advance Paid:       Rs.500.00');
                 lines.push(divider);
-                lines.push('<b>TOTAL:          Rs.400.00</b>');
+                lines.push('<b>TOTAL:          Rs.300.00</b>');
                 lines.push('');
                 lines.push(divider);
                 lines.push('<center><b>PAYMENT RECEIVED</b></center>');
@@ -385,14 +382,14 @@ export default function Home() {
     //   alert('Please enter a valid 10-digit Indian mobile number');
     //   return;
     // }
-    const total = maleCostume + femaleCostume + kidsCostume + tube + locker;
+    const total = dress + tube + locker;
     if (total === 0) {
       alert('Please select at least one item');
       return;
     }
 
     // Build checkout URL with optional parentTransactionId for linked transactions
-    let checkoutUrl = `/checkout?name=${encodeURIComponent(name)}&phone=${encodeURIComponent(phone)}&male=${maleCostume}&female=${femaleCostume}&kids=${kidsCostume}&tube=${tube}&locker=${locker}`;
+    let checkoutUrl = `/checkout?name=${encodeURIComponent(name)}&phone=${encodeURIComponent(phone)}&male=${dress}&tube=${tube}&locker=${locker}`;
 
     if (isLinking && existingTransaction) {
       checkoutUrl += `&parentId=${existingTransaction.id}&parentAdvance=${existingTransaction.advance}`;
@@ -560,9 +557,7 @@ export default function Home() {
                   </div>
                 </div>
                 <div className="text-xs text-gray-500 flex flex-wrap gap-2">
-                  {existingTransaction.maleCostume > 0 && <span>Male: {existingTransaction.maleCostume}</span>}
-                  {existingTransaction.femaleCostume > 0 && <span>Female: {existingTransaction.femaleCostume}</span>}
-                  {existingTransaction.kidsCostume > 0 && <span>Kids: {existingTransaction.kidsCostume}</span>}
+                  {getDressCount(existingTransaction) > 0 && <span>Dress: {getDressCount(existingTransaction)}</span>}
                   {existingTransaction.tube > 0 && <span>Tube: {existingTransaction.tube}</span>}
                   {existingTransaction.locker > 0 && <span>Locker: {existingTransaction.locker}</span>}
                 </div>
@@ -601,37 +596,14 @@ export default function Home() {
             </div>
           )}
 
-          {/* Costumes Card */}
+          {/* Dress Card */}
           <div className="bg-white rounded-2xl p-5 shadow-[0_4px_20px_rgba(0,0,0,0.08)]">
-            <h2 className="text-lg font-semibold text-gray-800 mb-4">Costumes</h2>
-
-            {/* Male */}
-            <div className="flex items-center justify-between py-2">
-              <span className="text-gray-700">Male</span>
+            <h2 className="text-lg font-semibold text-gray-800 mb-4">Dress</h2>
+            <div className="flex justify-center">
               <div className="flex items-center">
-                <button type="button" className={btnMinus} onClick={() => setMaleCostume(Math.max(0, maleCostume - 1))}>−</button>
-                <div className={counterDisplay}>{maleCostume}</div>
-                <button type="button" className={btnPlus} onClick={() => setMaleCostume(maleCostume + 1)}>+</button>
-              </div>
-            </div>
-
-            {/* Female */}
-            <div className="flex items-center justify-between py-2">
-              <span className="text-gray-700">Female</span>
-              <div className="flex items-center">
-                <button type="button" className={btnMinus} onClick={() => setFemaleCostume(Math.max(0, femaleCostume - 1))}>−</button>
-                <div className={counterDisplay}>{femaleCostume}</div>
-                <button type="button" className={btnPlus} onClick={() => setFemaleCostume(femaleCostume + 1)}>+</button>
-              </div>
-            </div>
-
-            {/* Kids */}
-            <div className="flex items-center justify-between py-2">
-              <span className="text-gray-700">Kids</span>
-              <div className="flex items-center">
-                <button type="button" className={btnMinus} onClick={() => setKidsCostume(Math.max(0, kidsCostume - 1))}>−</button>
-                <div className={counterDisplay}>{kidsCostume}</div>
-                <button type="button" className={btnPlus} onClick={() => setKidsCostume(kidsCostume + 1)}>+</button>
+                <button type="button" className={btnMinus} onClick={() => setDress(Math.max(0, dress - 1))}>−</button>
+                <div className={counterDisplay}>{dress}</div>
+                <button type="button" className={btnPlus} onClick={() => setDress(dress + 1)}>+</button>
               </div>
             </div>
           </div>
