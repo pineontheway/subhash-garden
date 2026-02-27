@@ -930,6 +930,11 @@ export default function Checkout() {
                     <span>₹{item.price.toFixed(2)}</span>
                   </div>
                 ))}
+                {receiptData.lockerNumbers && (
+                  <div className="text-gray-500 text-xs pl-1">
+                    Locker Number #: {receiptData.lockerNumbers}
+                  </div>
+                )}
               </div>
 
               <div className="w-full border-b-2 border-dashed border-gray-300 my-3"></div>
