@@ -312,6 +312,8 @@ export default function Checkout() {
       const lines: string[] = [];
 
       lines.push('<center><big>Subhash Garden</big></center>');
+      lines.push('<center>Survey no.243, Madanapalli (v)</center>');
+      lines.push('<center>Makloor (M) Nizamabad Dist.</center>');
       lines.push('<center>Costume Rental</center>');
       lines.push('');
       lines.push(blackBar);

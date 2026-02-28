@@ -283,6 +283,8 @@ export default function TicketCheckout() {
       const lines: string[] = [];
 
       lines.push('<center><big>Subhash Garden</big></center>');
+      lines.push('<center>Survey no.243, Madanapalli (v)</center>');
+      lines.push('<center>Makloor (M) Nizamabad Dist.</center>');
       lines.push('<center>Entry Ticket Invoice</center>');
       lines.push('<center>GSTIN: 36AJBPK1262EIZO</center>');
       lines.push('');
