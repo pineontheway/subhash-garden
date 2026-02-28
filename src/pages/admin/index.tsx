@@ -1215,25 +1215,27 @@ export default function AdminDashboard() {
                             <p className="text-sm text-blue-700">Revenue</p>
                           </div>
                         </div>
-                        <div className="border-t border-blue-200 pt-3">
-                          <h4 className="text-sm font-medium text-blue-800 mb-2">Ticket Breakdown</h4>
-                          <div className="grid grid-cols-4 gap-2 text-center">
-                            <div className="bg-white/50 rounded-lg p-2">
-                              <p className="text-lg font-bold text-blue-700">{ticketMenCount}</p>
-                              <p className="text-xs text-blue-800">Men</p>
-                            </div>
-                            <div className="bg-white/50 rounded-lg p-2">
-                              <p className="text-lg font-bold text-blue-700">{ticketWomenCount}</p>
-                              <p className="text-xs text-blue-800">Women</p>
-                            </div>
-                            <div className="bg-white/50 rounded-lg p-2">
-                              <p className="text-lg font-bold text-blue-700">{ticketChildCount}</p>
-                              <p className="text-xs text-blue-800">Child</p>
-                            </div>
-                            <div className="bg-white/50 rounded-lg p-2">
-                              <p className="text-lg font-bold text-purple-600">{ticketVipCount}</p>
-                              <p className="text-xs text-purple-700">VIP</p>
-                            </div>
+                      </div>
+
+                      {/* Visitor Breakdown */}
+                      <div className="bg-white rounded-2xl p-4 shadow-[0_4px_20px_rgba(0,0,0,0.08)]">
+                        <p className="text-sm font-medium text-gray-800 mb-3">Visitor Breakdown</p>
+                        <div className="grid grid-cols-4 gap-2 text-center">
+                          <div className="bg-gray-50 rounded-xl p-3">
+                            <p className="text-xl font-bold text-gray-700">{ticketMenCount}</p>
+                            <p className="text-xs text-gray-600">Men</p>
+                          </div>
+                          <div className="bg-gray-50 rounded-xl p-3">
+                            <p className="text-xl font-bold text-gray-700">{ticketWomenCount}</p>
+                            <p className="text-xs text-gray-600">Women</p>
+                          </div>
+                          <div className="bg-gray-50 rounded-xl p-3">
+                            <p className="text-xl font-bold text-gray-700">{ticketChildCount}</p>
+                            <p className="text-xs text-gray-600">Child</p>
+                          </div>
+                          <div className="bg-purple-50 rounded-xl p-3">
+                            <p className="text-xl font-bold text-purple-600">{ticketVipCount}</p>
+                            <p className="text-xs text-purple-700">VIP</p>
                           </div>
                         </div>
                       </div>
