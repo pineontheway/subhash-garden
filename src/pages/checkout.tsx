@@ -883,6 +883,8 @@ export default function Checkout() {
                   <img src="/logo.png" alt="Subhash Garden" className="w-8 h-8 rounded-full object-cover" />
                   <h2 className="text-xl font-bold text-gray-800">Subhash Garden</h2>
                 </div>
+                <p className="text-gray-500 text-xs">Survey no.243, Madanapalli (v)</p>
+                <p className="text-gray-500 text-xs">Makloor (M) Nizamabad Dist.</p>
                 <div className="w-full border-b-2 border-dashed border-gray-300 my-3"></div>
               </div>
 
