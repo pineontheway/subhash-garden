@@ -885,14 +885,15 @@ export default function Checkout() {
                 </div>
                 <p className="text-gray-500 text-xs">Survey no.243, Madanapalli (v)</p>
                 <p className="text-gray-500 text-xs">Makloor (M) Nizamabad Dist.</p>
+                <p className="text-gray-500 text-xs">Costume Rental</p>
                 <div className="w-full border-b-2 border-dashed border-gray-300 my-3"></div>
               </div>
 
               {/* Receipt Info */}
               <div className="space-y-1 text-gray-600 mb-4">
                 <div className="flex justify-between">
-                  <span>Date:</span>
-                  <span>{receiptData.timestamp}</span>
+                  <span>Cashier:</span>
+                  <span>{receiptData.cashierName}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Receipt #:</span>
@@ -905,8 +906,8 @@ export default function Checkout() {
                   </div>
                 )}
                 <div className="flex justify-between">
-                  <span>Cashier:</span>
-                  <span>{receiptData.cashierName}</span>
+                  <span>Date:</span>
+                  <span>{receiptData.timestamp}</span>
                 </div>
               </div>
 
